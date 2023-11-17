@@ -7,5 +7,9 @@ def read_txt(filename):
     wavelength = np.array([float(line.split(';')[0].replace(',', '.')) for line in read_lines[8:-1]])
     intensity = np.array([float(line.split(';')[1].replace(',', '.')) for line in read_lines[8:-1]])
     integration_time = float(read_lines[1].split(':')[1].strip().replace(',', '.'))
+    averaging = int(read_lines[2].split(':')[1].strip().replace(',', '.'))
+    smoothing = int(read_lines[3].split(':')[1].strip().replace(',', '.'))
+    spectrometer = read_lines[4].split(':')[1].strip().replace(',', '.')
 
-    return {'wavelength': wavelength, 'intensity': intensity, "integration_time": integration_time}
+    return {'wavelength': wavelength, 'intensity': intensity, "integration_time": integration_time,
+            "averaging": averaging, "smoothing": smoothing, "spectrometer": spectrometer}
