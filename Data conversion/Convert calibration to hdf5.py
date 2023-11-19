@@ -7,7 +7,7 @@ import h5py
 
 from Backend import read_txt
 
-loc = r'D:\OneDrive - TU Eindhoven\Master thesis\Measurements\Calibration\NO2 cuvette'
+loc = r'D:\OneDrive - TU Eindhoven\Master thesis\Measurements\Calibration\NO3 cuvette'
 species = ['NO2-', 'H2O2', 'NO3-']
 
 
@@ -53,7 +53,7 @@ with h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file:
     hdf5_file.attrs.create('reference_averaging', reference['averaging'])
 
     hdf5_file.attrs.create('wavelength', dark['wavelength'])
-    hdf5_file.attrs.create('integration_time', dark['integration_time'])
+    hdf5_file.attrs.create('integration_time_ms', dark['integration_time'])
     hdf5_file.attrs.create('smoothing', dark['smoothing'])
     hdf5_file.attrs.create('spectrometer', dark['spectrometer'])
     hdf5_file.attrs.create('notes', notes)

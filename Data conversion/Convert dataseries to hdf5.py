@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 import warnings
+import collections
 
 import numpy as np
 import h5py
@@ -28,8 +29,11 @@ with h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file:
         group.attrs.create('smoothing', dark['smoothing'])
         group.attrs.create('spectrometer', dark['spectrometer'])
 
-        timestamp, count = np.unique(np.array((map(lambda x: x.name.split('_')[1], os.scandir(folder.path)))), return_counts=True)
-        timestamp_number = dict(zip(timestamp, count))
+        files = np.array([x.name for x in os.scandir(folder.path)])
+        files = files[('dark.txt' != files) & ('reference.txt' != files)]
+        timestamp_number = collections.Counter(map(lambda x: x.split('_')[1], files))
+        # timestamp, count = np.unique(np.array(list(map(lambda x: x.split('_')[1], files))), return_counts=True)
+        # timestamp_number = dict(zip(timestamp, count))
 
         for file in os.scandir(folder.path):
             if ('dark' in file.name) or ('reference' in file.name):
