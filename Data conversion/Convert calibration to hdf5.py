@@ -7,7 +7,7 @@ import h5py
 
 from Backend import read_txt
 
-loc = r'D:\OneDrive - TU Eindhoven\Master thesis\Measurements\Calibration\NO3 cuvette'
+loc = r'D:\OneDrive - TU Eindhoven\Master thesis\Measurements\Calibration\NO3 pH'
 species = ['NO2-', 'H2O2', 'NO3-']
 
 
@@ -43,7 +43,7 @@ for specie in species:
         specie_dict = read_file(rf"{loc}\{specie}.txt")
         species_dicts[specie] = specie_dict
 
-with h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file:
+with (h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file):
     dark = read_txt(rf"{loc}\dark.txt")
     hdf5_file.attrs.create('dark', dark['intensity'])
     hdf5_file.attrs.create('dark_averaging', dark['averaging'])
@@ -60,7 +60,8 @@ with h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file:
 
     for file in os.scandir(loc):
         print(file)
-        if ('dark' in file.name) or ('reference' in file.name) or file.name.endswith('.hdf5') or 'notes' in file.name:
+        if (('dark' in file.name) or ('reference' in file.name) or file.name.endswith('.hdf5') or ('notes' in file.name)
+                or ('pH' in file.name) or ('conductivity' in file.name)):
             continue
 
         f_s = False

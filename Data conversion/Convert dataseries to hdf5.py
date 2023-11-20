@@ -52,6 +52,10 @@ with h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file:
             dataset = group.create_dataset(file.name, data=data['intensity'])
             dataset.attrs.create('averaging', data['averaging'])
 
-            ms = (int(file.name.split('_')[1].split('.')[0])-1)/timestamp_number[file.name.split('_')[1]]
-            timestamp = datetime.fromtimestamp(os.path.getmtime(file.path)+ms)
-            dataset.attrs.create('timestamp_ms', 1000*timestamp.timestamp())
+            ms = (int(file.name.split('_')[2].split('.')[0])-1)/timestamp_number[file.name.split('_')[1]]
+            hh = file.name.split('_')[1][0:2]
+            mm = file.name.split('_')[1][2:4]
+            ss = file.name.split('_')[1][4:6]
+            timestamp = 3600*int(hh)+60*int(mm)+int(ss)+ms
+            dataset.attrs.create('timestamp_ms', 1000*timestamp)
+        print(folder)
