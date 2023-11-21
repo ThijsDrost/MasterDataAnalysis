@@ -17,12 +17,12 @@ with h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file:
             continue
         group = hdf5_file.create_group(folder.name)
         dark = read_txt(rf"{folder.path}\dark.txt")
-        group.attrs.create('dark', dark['intensity'])
-        group.attrs.create('dark_averaging', dark['averaging'])
+        # group.attrs.create('dark', dark['intensity'])
+        # group.attrs.create('dark_averaging', dark['averaging'])
 
         reference = read_txt(rf"{folder.path}\reference.txt")
-        group.attrs.create('reference', reference['intensity'])
-        group.attrs.create('reference_averaging', reference['averaging'])
+        # group.attrs.create('reference', reference['intensity'])
+        # group.attrs.create('reference_averaging', reference['averaging'])
 
         group.attrs.create('wavelength', dark['wavelength'])
         group.attrs.create('integration_time', dark['integration_time'])
@@ -39,6 +39,7 @@ with h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file:
             if ('dark' in file.name) or ('reference' in file.name):
                 continue
             data = read_txt(file.path)
+            absorbance = -np.log10((data['intensity']-dark['intensity'])/(reference['intensity']-dark['intensity']))
 
             if not np.all(data['wavelength'] == dark['wavelength']):
                 warnings.warn(f"{file.name} has different wavelength than dark")
@@ -49,13 +50,14 @@ with h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file:
             if not (data['spectrometer'] == dark['spectrometer']):
                 warnings.warn(f"{file.name} has different spectrometer than dark")
 
-            dataset = group.create_dataset(file.name, data=data['intensity'])
+            dataset = group.create_dataset(file.name, data=absorbance)
             dataset.attrs.create('averaging', data['averaging'])
 
-            ms = (int(file.name.split('_')[2].split('.')[0])-1)/timestamp_number[file.name.split('_')[1]]
-            hh = file.name.split('_')[1][0:2]
-            mm = file.name.split('_')[1][2:4]
-            ss = file.name.split('_')[1][4:6]
-            timestamp = 3600*int(hh)+60*int(mm)+int(ss)+ms
-            dataset.attrs.create('timestamp_ms', 1000*timestamp)
+            ms = int(1000*(int(file.name.split('_')[2].split('.')[0])-1)/timestamp_number[file.name.split('_')[1]])
+            hh = int(file.name.split('_')[1][0:2])
+            mm = int(file.name.split('_')[1][2:4])
+            ss = int(file.name.split('_')[1][4:6])
+            m_timestamp = datetime.fromtimestamp(os.path.getmtime(file.path))
+            year, month, day = m_timestamp.year, m_timestamp.month, m_timestamp.day
+            dataset.attrs.create('timestamp_s', datetime(year, month, day, hh, mm, ss, ms).timestamp())
         print(folder)
