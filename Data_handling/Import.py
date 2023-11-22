@@ -56,6 +56,31 @@ class SimpleDataSet:
         self.variable = variable
         self.measurement_num = measurement_num
         self.variable_name = variable_name
+        if not len(self.wavelength) == self.absorbances.shape[1]:
+            raise ValueError("Wavelength and absorbances don't match")
+        if not len(self.variable) == self.absorbances.shape[0]:
+            raise ValueError("Variable and absorbances don't match")
+        if not len(self.measurement_num) == self.absorbances.shape[0]:
+            raise ValueError("Measurement number and absorbances don't match")
+
+    def __add__(self, other):
+        if not isinstance(other, SimpleDataSet):
+            raise TypeError(f"Can't add {type(other)} to SimpleDataSet")
+        if not self.wavelength == other.wavelength:
+            raise ValueError("Wavelengths don't match")
+        if not self.variable_name == other.variable_name:
+            raise ValueError("Variables don't match")
+        return SimpleDataSet(self.wavelength, np.concatenate((self.absorbances, other.absorbances)),
+                             np.concatenate((self.variable, other.variable)),
+                             np.concatenate((self.measurement_num, other.measurement_num)),
+                             self.variable_name)
+
+    def __getitem__(self, item):
+        return SimpleDataSet(self.wavelength, self.absorbances[item], self.variable[item], self.measurement_num[item],
+                             self.variable_name)
+
+    def __len__(self):
+        return len(self.variable)
 
 
 class DataSet(SimpleDataSet):
@@ -139,4 +164,21 @@ class DataSet(SimpleDataSet):
     @property
     def variable_best_num(self):
         return self._variable_best_num
+
+    @property
+    def simple(self):
+        return SimpleDataSet(self.wavelength, self.absorbances, self.variable, self.measurement_num, self.variable_name)
+
+    def add(self, other):
+        if isinstance(other, (DataSet, SimpleDataSet)):
+            if not self.wavelength == other.wavelength:
+                raise ValueError("Wavelengths don't match")
+            if not self.variable_name == other.variable_name:
+                raise ValueError("Variables don't match")
+            return DataSet(self.wavelength, np.concatenate((self.absorbances, other.absorbances)),
+                           np.concatenate((self.variable, other.variable)),
+                           np.concatenate((self.measurement_num, other.measurement_num)),
+                           self.variable_name, self.wavelength_range, self.baseline_correction, self._selected_num)
+        else:
+            raise TypeError(f"Can't add {type(other)} to DataSet")
 
