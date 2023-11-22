@@ -29,6 +29,7 @@ TIME_FUNCS = [lambda file: os.path.getmtime(file),
               lambda file: get_time_rel(file)]
 SPECIES = ['NO2-', 'H2O2', 'NO3-']
 SKIP_NAMES = ['dark', 'reference', '.hdf5', 'notes', 'pH', 'conductivity']
+FIND_METHODS = ['closest_before', 'closest']
 
 
 def read_file(loc):
@@ -105,7 +106,12 @@ def make_hdf5(loc, time_func):
                 print(f'\r{100*(index+1)/len(folders):.1f}% done, done in approx {hours:.02d}:{minutes:.02d}:{seconds:.02d}', end='')
 
 
-def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dicts=None, time_func=TIME_FUNCS[0]):
+def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dicts=None, time_func=TIME_FUNCS[0],
+                find_method='closest_before'):
+    if find_method not in FIND_METHODS:
+        warnings.warn(f"find_method {find_method} not recognized, should be in {FIND_METHODS}, `closest_before` used instead")
+        find_method = 'closest_before'
+
     files = [file for file in os.scandir(loc) if file.is_file()]
 
     dark_files = [file for file in files if 'dark' in file.name]
@@ -146,19 +152,29 @@ def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dict
         if not (data == dark_reads[0]):
             warnings.warn(f"{file.name}: {data.give_diff(dark_reads[0])}")
 
-        dark_arg = np.argwhere(time_func(file.path) > dark_times)[0]
-        if dark_arg.size == 0:
-            warnings.warn(f"{file.name}: no dark found, first one used")
-            best_dark_index = 0
-        else:
-            best_dark_index = dark_arg[0]
+        best_dark_index, best_reference_index = 0, 0
+        dark_found = True
+        reference_found = True
+        if find_method == 'closest_before':
+            dark_arg = np.argwhere(time_func(file.path) > dark_times)[0]
+            if dark_arg.size == 0:
+                warnings.warn(f"{file.name}: no earlier dark found, closest one used")
+                dark_found = False
+            else:
+                best_dark_index = dark_arg[0]
 
-        reference_arg = np.argwhere(time_func(file.path) > reference_times)[0]
-        if reference_arg.size == 0:
-            warnings.warn(f"{file.name}: no reference found, first one used")
-            best_reference_index = 0
-        else:
-            best_reference_index = reference_arg[0]
+            reference_arg = np.argwhere(time_func(file.path) > reference_times)[0]
+            if reference_arg.size == 0:
+                warnings.warn(f"{file.name}: no earlier reference found, closest one used")
+                reference_found = False
+            else:
+                best_reference_index = reference_arg[0]
+
+        if (find_method == 'closest') or not dark_found:
+            best_dark_index = np.argmin(np.abs(time_func(file.path) - dark_times))
+        if (find_method == 'closest') or not reference_found:
+            best_reference_index = np.argmin(np.abs(time_func(file.path) - reference_times))
+
 
         absorbance = -np.log10((data.intensity - dark_reads[best_dark_index].intensity) / (
                     reference_reads[best_reference_index].intensity - dark_reads[best_dark_index].intensity))
