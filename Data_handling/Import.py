@@ -1,6 +1,7 @@
 import os
 import itertools
 import warnings
+from typing import Union
 
 import numpy as np
 import h5py
@@ -112,8 +113,8 @@ class DataSet(SimpleDataSet):
             min_num = pair_values[np.argmin(value)]
             # self._absorbance_best_num[i] = (absorbances[:, self._mask][variable == v][min_num[0]] + absorbances[:, self._mask][variable == v][
             #     min_num[1]]) / 2
-            self._absorbance_best_num[i] = (self.absorbances_masked_corrected[variable == v][min_num[0]]
-                                            + self.absorbances_masked_corrected[variable == v][min_num[1]]) / 2
+            self._absorbance_best_num[i] = (self.absorbances[variable == v][min_num[0]]
+                                            + self.absorbances[variable == v][min_num[1]]) / 2
             self._variable_best_num[i] = v
 
     @staticmethod
@@ -122,46 +123,107 @@ class DataSet(SimpleDataSet):
                        simple_data_set.measurement_num, simple_data_set.variable_name, wavelength_range,
                        baseline_correction, selected_num)
 
-    @property
-    def absorbances_masked(self):
-        return self.absorbances[:, self._mask]
+    def get_absorbances(self, corrected=True, masked=True, num: Union[str, int, None] = 'all', var_value=None):
+        correction = 0
+        if corrected:
+            correction = self.baseline_correction
+
+        wav_mask = np.ones(len(self._mask), dtype=bool)
+        if masked:
+            wav_mask = self._mask
+
+        if var_value is not None:
+            if var_value not in self.variable:
+                raise ValueError(f'Variable value {var_value} not in dataset')
+            vn_mask = self.variable == var_value
+        else:
+            vn_mask = np.ones(len(self.measurement_num), dtype=bool)
+
+        absorbances = self.absorbances
+        if (num is None) or num == 'all':
+            pass
+        elif num == 'plot':
+            vn_mask = vn_mask & (self.measurement_num == self._selected_num)
+        elif num == 'best':
+            absorbances = self._absorbance_best_num
+            if var_value is not None:
+                vn_mask = self.variable_best_num == var_value
+        elif isinstance(num, int):
+            vn_mask = vn_mask & (self.measurement_num == num)
+        else:
+            raise ValueError(f'num should be None, "all", "plot", "best" or an integer, not {num}')
+
+        return absorbances[vn_mask][:, wav_mask] - correction
 
     @property
     def wavelength_masked(self):
         return self.wavelength[self._mask]
 
     @property
-    def absorbances_corrected(self):
-        return self.absorbances - self._baseline_correction
-
-    @property
-    def absorbances_masked_corrected(self):
-        return self.absorbances_masked - self._baseline_correction
-
-    @property
-    def absorbances_masked_corrected_num(self):
-        return self.absorbances_masked_corrected[self.measurement_num == self._selected_num]
-
-    @property
-    def absorbances_masked_num(self):
-        return self.absorbances_masked[self.measurement_num == self._selected_num]
-
-    @property
     def variable_num(self):
         return self.variable[self.measurement_num == self._selected_num]
 
-    def absorbances_masked_corrected_get_num(self, num):
-        return self.absorbances_masked_corrected[self.measurement_num == num]
-
-    def absorbances_masked_get_num(self, num):
-        return self.absorbances_masked[self.measurement_num == num]
-
-    def variable_get_num(self, num):
+    def variable_at_num(self, num):
         return self.variable[self.measurement_num == num]
+
+    def measurement_num_at_value(self, value):
+        return self.measurement_num[self.variable == value]
+
+    @property
+    def absorbances_masked(self):
+        return self.get_absorbances(False, True, None)
+
+    @property
+    def absorbances_corrected(self):
+        return self.get_absorbances(True, False, None)
+
+    @property
+    def absorbances_masked_corrected(self):
+        return self.get_absorbances(True, True, None)
+
+    @property
+    def absorbances_masked_corrected_num(self):
+        return self.get_absorbances(True, True, 'plot')
+
+    @property
+    def absorbances_num(self):
+        return self.get_absorbances(False, False, 'plot')
+
+    @property
+    def absorbances_masked_num(self):
+        return self.get_absorbances(False, True, 'plot')
+
+    @property
+    def absorbances_corrected_num(self):
+        return self.get_absorbances(True, False, 'plot')
+
+    def absorbances_masked_corrected_at_num(self, num):
+        return self.get_absorbances(True, True, num)
+
+    def absorbances_masked_at_num(self, num):
+        return self.get_absorbances(False, True, num)
+
+    def absorbances_at_num(self, num):
+        return self.get_absorbances(False, False, num)
+
+    def absorbances_corrected_at_num(self, num):
+        return self.get_absorbances(True, False, num)
 
     @property
     def absorbances_masked_best_num(self):
-        return self._absorbance_best_num
+        return self.get_absorbances(False, True, 'best')
+
+    @property
+    def absorbances_masked_corrected_best_num(self):
+        return self.get_absorbances(True, True, 'best')
+
+    @property
+    def absorbances_corrected_best_num(self):
+        return self.get_absorbances(True, False, 'best')
+
+    @property
+    def absorbances_best_num(self):
+        return self.get_absorbances(False, False, 'best')
 
     @property
     def variable_best_num(self):
