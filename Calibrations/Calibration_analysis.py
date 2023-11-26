@@ -6,62 +6,39 @@ import matplotlib.pyplot as plt
 import scipy
 import lmfit
 
-from Data_handling.Import import import_hdf5, DataSet
-
-
-# loc = r'D:\OneDrive - TU Eindhoven\Master thesis\Measurements\Calibration\NO3 pH\self.hdf5'
-# image_loc = r'D:\OneDrive - TU Eindhoven\Master thesis\Plots\Calibration\NO3 pH'
-# dependent = 'pH'
-# variable_name = 'pH'
-# variable_factor = 1
-# wavelength_range = [180, 400]
-# r2_values = [0.99, 1]
-# wavelength_plot_every = 5
-# plot_measurement_num = 2
-# baseline_correction = [300, 400]
-# 
-# 
-# if not os.path.exists(image_loc):
-#     os.makedirs(image_loc)
-# 
-# 
-# def save_loc(loc):
-#     return os.path.join(image_loc, loc)
-# 
-# 
-# temp = import_hdf5(loc, dependent)
-# data = DataSet.from_simple(import_hdf5(loc, dependent), wavelength_range, baseline_correction, plot_measurement_num)
+from Data_handling.Import import DataSet
 
 
 class Analyzer(DataSet):
-    def __init__(self, variable_name, *args, variable_factor=1, cmap='jet', **kwargs):
+    def __init__(self, variable_display_name, *args, variable_factor=1, cmap='jet', **kwargs):
         super().__init__(*args, **kwargs)
         self.variable_factor = variable_factor
-        self.variable_name = variable_name
+        self.variable_display_name = variable_display_name
         self.cmap = cmap
 
     @staticmethod
-    def from_DataSet(dataset):
-        return Analyzer(dataset.wavelength, dataset.absorbances, dataset.variable, dataset.variable_name,
-                        dataset.variable_num, dataset.measurement_num, dataset.variable_factor,
-                        dataset.wavelength_range, dataset.baseline_correction, dataset.plot_measurement_num)
+    def from_DataSet(dataset, variable_factor, variable_display_name, cmap):
+        return Analyzer(variable_display_name, dataset.wavelength, dataset.absorbances, dataset.variable,
+                        dataset.measurement_num, dataset.variable_name, dataset.wavelength_range,
+                        dataset._selected_num, dataset.baseline_correction, variable_factor=variable_factor,
+                        cmap=cmap)
 
     def get_wavelength(self, masked=True):
         return self.wavelength_masked if masked else self.wavelength
 
     @staticmethod
-    def _setting_setter(ax, xlabel=None, ylabel=None, title=None, grid=True, legend=True):
-        if xlabel is not None:
+    def _setting_setter(ax, xlabel='', ylabel='', title='', grid=True, legend=''):
+        if xlabel:
             ax.set_xlabel(xlabel)
-        if ylabel is not None:
+        if ylabel:
             ax.set_ylabel(ylabel)
-        if title is not None:
+        if title:
             ax.set_title(title)
         if grid:
             ax.grid()
         if legend:
             ax.legend(title=legend)
-        ax.tight_layout()
+        # ax.tight_layout()
 
     def absorbance_vs_wavelength_with_num(self, *, corrected=True, masked=True, save_loc=None, show=False, **plot_kwargs):
         for value in np.unique(self.variable):
@@ -89,7 +66,8 @@ class Analyzer(DataSet):
             fig, ax = plt.subplots()
             wav_abs_mask = self.get_absorbances(corrected, masked, num, value)[-1, :] > min_absorbance
             for index, wav in enumerate(self.wavelength_masked[wav_abs_mask][::wavelength_plot_every]):
-                vals = self.get_absorbances(corrected, masked, num, value).T[::wavelength_plot_every][index]
+                val1 = self.get_absorbances(corrected, masked, 'all', value)
+                vals = val1.T[::wavelength_plot_every][index]
                 plt.plot(self.measurement_num_at_value(value), vals / vals[-1], 'o-',
                          color=cmap(index / (np.sum(wav_abs_mask.astype(int))//wavelength_plot_every)))
             plt.xlabel('Measurement measurement_num')
@@ -116,7 +94,7 @@ class Analyzer(DataSet):
                      label=self.variable_factor * var)
         plt.xlabel('Wavelength (nm)')
         plt.ylabel('Absorbance')
-        plt.legend(title=self.variable_name)
+        plt.legend(title=self.variable_display_name)
         plt.tight_layout()
         self._setting_setter(ax, **plot_kwargs)
         if save_loc is not None:
@@ -356,7 +334,7 @@ class Analyzer(DataSet):
         # plt.plot(self.wavelength_masked, self.absorbances_masked.T/ratio, label=self.variable)
         plt.xlabel('Wavelength (nm)')
         plt.ylabel('Normalized absorbance (A.U.)')
-        plt.legend(lines, labels, title=self.variable_name)
+        plt.legend(lines, labels, title=self.variable_display_name)
         plt.grid()
         plt.tight_layout()
         self._setting_setter(ax, **plot_kwargs)

@@ -69,7 +69,7 @@ class SimpleDataSet:
     def __add__(self, other):
         if not isinstance(other, SimpleDataSet):
             raise TypeError(f"Can't add {type(other)} to SimpleDataSet")
-        if not self.wavelength == other.wavelength:
+        if not np.all(self.wavelength == other.wavelength):
             raise ValueError("Wavelengths don't match")
         if not self.variable_name == other.variable_name:
             raise ValueError("Variables don't match")
@@ -88,22 +88,25 @@ class SimpleDataSet:
 
 class DataSet(SimpleDataSet):
     def __init__(self, wavelength, absorbances, variable, measurement_num, variable_name, wavelength_range,
-                 baseline_correction, selected_num):
+                 selected_num, baseline_correction=None):
         super().__init__(wavelength, absorbances, variable, measurement_num, variable_name)
         self.wavelength_range = wavelength_range
-        self.baseline_correction = baseline_correction
+        # self.baseline_correction = baseline_correction
         self._selected_num = selected_num
         if wavelength_range is not None:
             self._mask = (wavelength_range[0] < wavelength) & (wavelength < wavelength_range[1])
-        if baseline_correction is not None:
-            correction_mask = (baseline_correction[0] < wavelength) & (wavelength < baseline_correction[1])
-            self._baseline_correction = np.mean(absorbances[:, correction_mask], axis=1)[:, np.newaxis]
+        # if baseline_correction is not None:
 
-        self._absorbance_best_num = np.zeros((len(np.unique(variable)), np.sum(self._mask.astype(int))))
+        self.baseline_correction = baseline_correction if baseline_correction is not None else [wavelength[0], wavelength[-1]]
+        correction_mask = (self.baseline_correction[0] < wavelength) & (wavelength < self.baseline_correction[1])
+        self._baseline_correction = np.mean(absorbances[:, correction_mask], axis=1)[:, np.newaxis]
+
+        self._absorbance_best_num = np.zeros((len(np.unique(variable)), len(self.wavelength)))
         self._variable_best_num = np.zeros(len(np.unique(variable)))
         for i, v in enumerate(np.unique(variable)):
             # v_absorbances = absorbances[:, self._mask][variable == v]
-            v_absorbances = self.absorbances_masked_corrected[variable == v]
+            # v_absorbances = self.absorbances_masked_corrected[variable == v]
+            v_absorbances = self.get_absorbances(True, True, None, v)
             value = []
             pair_values = []
             for pair in itertools.combinations(range(len(v_absorbances)), 2):
@@ -111,22 +114,20 @@ class DataSet(SimpleDataSet):
                 value.append(np.sum((v_absorbances[pair[0]][mask] - v_absorbances[pair[1]][mask]) ** 2))
                 pair_values.append(pair)
             min_num = pair_values[np.argmin(value)]
-            # self._absorbance_best_num[i] = (absorbances[:, self._mask][variable == v][min_num[0]] + absorbances[:, self._mask][variable == v][
-            #     min_num[1]]) / 2
-            self._absorbance_best_num[i] = (self.absorbances[variable == v][min_num[0]]
-                                            + self.absorbances[variable == v][min_num[1]]) / 2
+            self._absorbance_best_num[i] = (self.get_absorbances(True, False, min_num[0]+1, v)
+                                            + self.get_absorbances(True, False, min_num[1]+1, v)) / 2
             self._variable_best_num[i] = v
 
     @staticmethod
-    def from_simple(simple_data_set, wavelength_range, baseline_correction, selected_num):
+    def from_simple(simple_data_set, wavelength_range, selected_num, baseline_correction):
         return DataSet(simple_data_set.wavelength, simple_data_set.absorbances, simple_data_set.variable,
-                       simple_data_set.measurement_num, simple_data_set.variable_name, wavelength_range,
-                       baseline_correction, selected_num)
+                       simple_data_set.measurement_num, simple_data_set.variable_name, wavelength_range, selected_num,
+                       baseline_correction)
 
     def get_absorbances(self, corrected=True, masked=True, num: Union[str, int, None] = 'all', var_value=None):
-        correction = 0
+        absorbances = self.absorbances
         if corrected:
-            correction = self.baseline_correction
+            absorbances = self.absorbances - self._baseline_correction
 
         wav_mask = np.ones(len(self._mask), dtype=bool)
         if masked:
@@ -139,7 +140,7 @@ class DataSet(SimpleDataSet):
         else:
             vn_mask = np.ones(len(self.measurement_num), dtype=bool)
 
-        absorbances = self.absorbances
+        # absorbances = self.absorbances
         if (num is None) or num == 'all':
             pass
         elif num == 'plot':
@@ -148,12 +149,14 @@ class DataSet(SimpleDataSet):
             absorbances = self._absorbance_best_num
             if var_value is not None:
                 vn_mask = self.variable_best_num == var_value
+            if not corrected:
+                warnings.warn('Baseline correction is always applied to `best` absorbances')
         elif isinstance(num, int):
             vn_mask = vn_mask & (self.measurement_num == num)
         else:
             raise ValueError(f'num should be None, "all", "plot", "best" or an integer, not {num}')
 
-        return absorbances[vn_mask][:, wav_mask] - correction
+        return absorbances[vn_mask][:, wav_mask]
 
     @property
     def wavelength_masked(self):
@@ -235,7 +238,7 @@ class DataSet(SimpleDataSet):
 
     def add(self, other):
         if isinstance(other, (DataSet, SimpleDataSet)):
-            if not self.wavelength == other.wavelength:
+            if not np.all(self.wavelength == other.wavelength):
                 raise ValueError("Wavelengths don't match")
             if not self.variable_name == other.variable_name:
                 raise ValueError("Variables don't match")
