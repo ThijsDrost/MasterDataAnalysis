@@ -311,79 +311,92 @@ class Analyzer(DataSet):
             plt.close()
 
 
-# %%
-def residual(pars, x, reference):
-    a = pars['a'].value
-    return x - a * reference
+    def relative_intensity_fit_vs_variable(self, *, corrected=True, masked=True, save_loc=None, num='plot', show=True,
+                                           reference_line, **plot_kwargs):
+        def residual(pars, x, reference):
+            a = pars['a'].value
+            return x - a * reference
 
 
-params = lmfit.Parameters()
-params.add('a', value=1, vary=True)
-ratio = []
-ratio_std = []
-for i in self.absorbances_masked:
-    result = lmfit.minimize(residual, params, args=(i,), kws={'reference': self.absorbances_masked[-1]})
-    ratio.append(result.params['a'].value)
-    ratio_std.append(result.params['a'].stderr)
-ratio = np.array(ratio)
-ratio_std = np.array(ratio_std)
+        params = lmfit.Parameters()
+        params.add('a', value=1, vary=True)
+        ratio = []
+        ratio_std = []
+        max_var = np.max(self.variable)
+        for i in self.get_absorbances(corrected, masked, num, None):
+            result = lmfit.minimize(residual, params, args=(i,),
+                                    kws={'reference': self.get_absorbances(corrected, masked, num, max_var)})
+            ratio.append(result.params['a'].value)
+            ratio_std.append(result.params['a'].stderr)
+        ratio = np.array(ratio)
+        ratio_std = np.array(ratio_std)
 
-plt.figure()
-plt.errorbar(self.variable, ratio, yerr=ratio_std, capsize=2, fmt='.')
-plt.xlabel(self.variable_name)
-plt.ylabel('Ratio')
-plt.grid()
-plt.tight_layout()
-plt.savefig(save_loc(f'Relative intensity vs {self.variable_name}.png'))
-plt.close()
+        fig, ax = plt.subplots()
+        plt.errorbar(self.variable, ratio, yerr=ratio_std, capsize=2, fmt='.', label='measured intensity')
+        if reference_line is not None:
+            plt.plot(reference_line['x'], reference_line['y'], label=reference_line['label'])
+        plt.xlabel(self.variable_name)
+        plt.ylabel('Ratio')
+        plt.grid()
+        plt.tight_layout()
+        self._setting_setter(ax, **plot_kwargs)
+        if save_loc is not None:
+            plt.savefig(os.path.join(save_loc, f'Relative intensity vs {self.variable_name}.png'))
+        if show:
+            plt.show()
+        else:
+            plt.close()
 
-lines, labels = [], []
-plt.figure()
-for index, var in enumerate(np.unique(self.variable)):
-    plt.plot(self.wavelength_masked, self.absorbances_masked[self.variable == var].T / ratio[self.variable == var], f'C{index}', label=var)
-    lines.append(plt.Line2D([0], [0], color=f'C{index}'))
-    labels.append(f'{var}')
-# plt.plot(self.wavelength_masked, self.absorbances_masked.T/ratio, label=self.variable)
-plt.xlabel('Wavelength (nm)')
-plt.ylabel('Normalized absorbance (A.U.)')
-plt.legend(lines, labels, title=self.variable_name)
-plt.grid()
-plt.tight_layout()
-plt.savefig(save_loc(f'Normalized absorbance vs wavelength.png'))
-plt.close()
+        lines, labels = [], []
+        plt.figure()
+        for index, var in enumerate(np.unique(self.variable)):
+            plt.plot(self.wavelength_masked, self.absorbances_masked[self.variable == var].T / ratio[self.variable == var], f'C{index}', label=var)
+            lines.append(plt.Line2D([0], [0], color=f'C{index}'))
+            labels.append(f'{var}')
+        # plt.plot(self.wavelength_masked, self.absorbances_masked.T/ratio, label=self.variable)
+        plt.xlabel('Wavelength (nm)')
+        plt.ylabel('Normalized absorbance (A.U.)')
+        plt.legend(lines, labels, title=self.variable_name)
+        plt.grid()
+        plt.tight_layout()
+        self._setting_setter(ax, **plot_kwargs)
+        if save_loc is not None:
+            plt.savefig(os.path.join(save_loc, f'Normalized absorbance vs wavelength.png'))
+        if show:
+            plt.show()
+        else:
+            plt.close()
+
+    def full_spectrum_fit_with_methods(self):
+        def residual(pars, x, concentration):
+            a = pars['a'].value
+            return x - a * concentration * x[-1]
 
 
-# %%
-def residual(pars, x, concentration):
-    a = pars['a'].value
-    return x - a * concentration * x[-1]
+        params = lmfit.Parameters()
+        params.add('a', value=1, vary=True)
 
+        result = lmfit.minimize(residual, params, args=(self.absorbances_masked_corrected,),
+                                kws={'concentration': self.variable[:, np.newaxis]})
+        result_num = lmfit.minimize(residual, params, args=(self.absorbances_masked_corrected_num,),
+                                    kws={'concentration': self.variable_num[:, np.newaxis]})
+        result_uncorr = lmfit.minimize(residual, params, args=(self.absorbances_masked,),
+                                       kws={'concentration': self.variable[:, np.newaxis]})
+        result_uncorr_num = lmfit.minimize(residual, params, args=(self.absorbances_masked_num,),
+                                           kws={'concentration': self.variable_num[:, np.newaxis]})
+        result_best_num = lmfit.minimize(residual, params, args=(self.absorbances_masked_best_num,),
+                                         kws={'concentration': self.variable_best_num[:, np.newaxis]})
 
-params = lmfit.Parameters()
-params.add('a', value=1, vary=True)
+        print(
+        f"""
+        # Fit report
+        corrected: {result.params['a'].value:.3f} ± {result.params['a'].stderr:.3f}
+        corrected num: {result_num.params['a'].value:.3f} ± {result_num.params['a'].stderr:.3f}
+        uncorrected: {result_uncorr.params['a'].value:.3f} ± {result_uncorr.params['a'].stderr:.3f}
+        uncorrected num: {result_uncorr_num.params['a'].value:.3f} ± {result_uncorr_num.params['a'].stderr:.3f}
+        best num: {result_best_num.params['a'].value:.3f} ± {result_best_num.params['a'].stderr:.3f}
+        """)
 
-if baseline_correction is not None:
-    result = lmfit.minimize(residual, params, args=(self.absorbances_masked_corrected,),
-                            kws={'concentration': self.variable[:, np.newaxis]})
-    result_num = lmfit.minimize(residual, params, args=(self.absorbances_masked_corrected_num,),
-                                kws={'concentration': self.variable_num[:, np.newaxis]})
-result_uncorr = lmfit.minimize(residual, params, args=(self.absorbances_masked,),
-                               kws={'concentration': self.variable[:, np.newaxis]})
-result_uncorr_num = lmfit.minimize(residual, params, args=(self.absorbances_masked_num,),
-                                   kws={'concentration': self.variable_num[:, np.newaxis]})
-result_best_num = lmfit.minimize(residual, params, args=(self.absorbances_masked_best_num,),
-                                 kws={'concentration': self.variable_best_num[:, np.newaxis]})
-
-print(
-f"""
-# Fit report
-corrected: {result.params['a'].value:.3f} ± {result.params['a'].stderr:.3f}
-corrected num: {result_num.params['a'].value:.3f} ± {result_num.params['a'].stderr:.3f}
-uncorrected: {result_uncorr.params['a'].value:.3f} ± {result_uncorr.params['a'].stderr:.3f}
-uncorrected num: {result_uncorr_num.params['a'].value:.3f} ± {result_uncorr_num.params['a'].stderr:.3f}
-best num: {result_best_num.params['a'].value:.3f} ± {result_best_num.params['a'].stderr:.3f}
-""")
-
-plt.figure()
-plt.plot(self.wavelength_masked, (self.absorbances_masked_num / (result.params['a'].value * self.variable_num[:, np.newaxis])).T)
-plt.close()
+# plt.figure()
+# plt.plot(self.wavelength_masked, (self.absorbances_masked_num / (result.params['a'].value * self.variable_num[:, np.newaxis])).T)
+# plt.close()
