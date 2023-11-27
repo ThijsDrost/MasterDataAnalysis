@@ -9,6 +9,13 @@ import scipy
 import lmfit
 
 
+def drive_letter():
+    for letter in ['D', 'E']:
+        if os.path.exists(f'{letter}:'):
+            return letter
+    raise FileNotFoundError('No drives found')
+
+
 def import_hdf5(loc, dependent):
     with h5py.File(loc, 'r') as file:
         has_group = False
@@ -103,20 +110,34 @@ class DataSet(SimpleDataSet):
 
         self._absorbance_best_num = np.zeros((len(np.unique(variable)), len(self.wavelength)))
         self._variable_best_num = np.zeros(len(np.unique(variable)))
+        # self._baseline_correction_best_num = np.zeros(len(np.unique(variable)))
         for i, v in enumerate(np.unique(variable)):
             # v_absorbances = absorbances[:, self._mask][variable == v]
             # v_absorbances = self.absorbances_masked_corrected[variable == v]
-            v_absorbances = self.get_absorbances(True, True, None, v)
+            # v_absorbances = self.get_absorbances(True, True, None, v)
+            nums = self.measurement_num_at_value(v)
             value = []
             pair_values = []
-            for pair in itertools.combinations(range(len(v_absorbances)), 2):
-                mask = v_absorbances[0] > 0.5 * np.max(v_absorbances[0])
-                value.append(np.sum((v_absorbances[pair[0]][mask] - v_absorbances[pair[1]][mask]) ** 2))
-                pair_values.append(pair)
-            min_num = pair_values[np.argmin(value)]
-            self._absorbance_best_num[i] = (self.get_absorbances(True, False, min_num[0]+1, v)
-                                            + self.get_absorbances(True, False, min_num[1]+1, v)) / 2
-            self._variable_best_num[i] = v
+            if len(nums) == 1:
+                num = self.measurement_num_at_value(v)[0]
+                self._absorbance_best_num[i] = self.get_absorbances(True, False, num, v)
+                self._variable_best_num[i] = v
+            elif len(nums) >= 2:
+                for pair in itertools.combinations(nums, 2):
+                    intensities = self.get_absorbances(True, True, nums[0], v)
+                    mask = intensities > 0.1 * np.max(intensities)
+                    value.append(np.sum((self.get_absorbances(False, True, pair[0], v)[mask]
+                                         - self.get_absorbances(False, True, pair[1], v)[mask]) ** 2))
+                    # value.append(np.sum((v_absorbances[pair[0]][mask] - v_absorbances[pair[1]][mask]) ** 2))
+                    pair_values.append(pair)
+
+                min_num = pair_values[np.argmin(value)]
+                self._absorbance_best_num[i] = (self.get_absorbances(False, False, min_num[0], v)
+                                                + self.get_absorbances(False, False, min_num[1], v)) / 2
+                self._variable_best_num[i] = v
+            else:
+                raise ValueError(f'No absorbances for variable value {v}')
+        self._baseline_correction_best_num = np.mean(self._absorbance_best_num[:, correction_mask], axis=1)[:, np.newaxis]
 
     @staticmethod
     def from_simple(simple_data_set, wavelength_range, selected_num, baseline_correction):
@@ -137,8 +158,12 @@ class DataSet(SimpleDataSet):
             if var_value not in self.variable:
                 raise ValueError(f'Variable value {var_value} not in dataset')
             vn_mask = self.variable == var_value
+            if num == 'best':
+                vn_mask = self.variable_best_num == var_value
         else:
             vn_mask = np.ones(len(self.measurement_num), dtype=bool)
+            if num == 'best':
+                vn_mask = np.ones(len(self.variable_best_num), dtype=bool)
 
         # absorbances = self.absorbances
         if (num is None) or num == 'all':
@@ -147,11 +172,9 @@ class DataSet(SimpleDataSet):
             vn_mask = vn_mask & (self.measurement_num == self._selected_num)
         elif num == 'best':
             absorbances = self._absorbance_best_num
-            if var_value is not None:
-                vn_mask = self.variable_best_num == var_value
-            if not corrected:
-                warnings.warn('Baseline correction is always applied to `best` absorbances')
-        elif isinstance(num, int):
+            if corrected:
+                absorbances = self._absorbance_best_num - self._baseline_correction_best_num
+        elif isinstance(num, (int, np.int_)):
             vn_mask = vn_mask & (self.measurement_num == num)
         else:
             raise ValueError(f'num should be None, "all", "plot", "best" or an integer, not {num}')

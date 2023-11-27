@@ -9,9 +9,10 @@ from Backend import read_txt, get_time, get_time_rel
 
 
 def main():
-    loc = r'E:\OneDrive - TU Eindhoven\Master thesis\Measurements\Calibration\NO2_H2O2 cuvette'
+    loc = r'E:\OneDrive - TU Eindhoven\Master thesis\Measurements\Calibration\NO2 (1)'
     time_index = 0
-    make_hdf5(loc, TIME_FUNCS[time_index])
+    find_index = 0
+    make_hdf5(loc, TIME_FUNCS[time_index], FIND_METHODS[find_index])
 
 # time index 0 uses the modification time of the file (getmtime) to get timestamp, which is conserved when files are
 # copied, but this is only precise to the second for the spectrometer files
@@ -28,8 +29,10 @@ TIME_FUNCS = [lambda file: os.path.getmtime(file),
               lambda file: get_time(file),
               lambda file: get_time_rel(file)]
 SPECIES = ['NO2-', 'H2O2', 'NO3-']
-SKIP_NAMES = ['dark', 'reference', '.hdf5', 'notes', 'pH', 'conductivity']
+SKIP_NAMES = ['dark', '.hdf5', 'notes', 'pH', 'conductivity']
 FIND_METHODS = ['closest_before', 'closest']
+REFERENCE_NAMES = ['ref', 'reference']
+# DARK_NAMES = ['dark']
 
 
 def read_file(loc):
@@ -49,10 +52,13 @@ def check_skip(file):
     for specie in SPECIES:
         if specie in file.name:
             return True
+    for reference_name in REFERENCE_NAMES:
+        if reference_name in file.name.lower():
+            return True
     return False
 
 
-def make_hdf5(loc, time_func):
+def make_hdf5(loc, time_func, find_method):
     if os.path.exists(rf"{loc}\pH.txt"):
         pH = read_file(rf"{loc}\pH.txt")
     else:
@@ -91,14 +97,14 @@ def make_hdf5(loc, time_func):
 
     if file:
         with h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file:
-            read_folder(loc, hdf5_file, notes, pH, conductivity, species_dicts, time_func)
+            read_folder(loc, hdf5_file, notes, pH, conductivity, species_dicts, time_func, find_method)
     else:
         with h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file:
             start = time.time()
             folders = [folder for folder in os.scandir(loc) if folder.is_dir()]
             for index, folder in enumerate(folders):
                 group = hdf5_file.create_group(folder.name)
-                read_folder(folder.path, group, notes, pH, conductivity, species_dicts, time_func)
+                read_folder(folder.path, group, notes, pH, conductivity, species_dicts, time_func, find_method)
                 dt = time.time() - start
                 time_left = (len(folders) - index - 1) * dt / (index + 1)
                 hours, rem = divmod(time_left, 3600)
@@ -120,14 +126,23 @@ def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dict
     if len(dark_reads) > 1:
         for i in range(1, len(dark_reads)):
             if not (dark_reads[0] == dark_reads[i]):
-                warnings.warn(f"{dark_files[i].name}: {dark_reads[i].give_diff(dark_reads[0])}")
+                raise ValueError(f"{dark_files[i].name}: {dark_reads[i].give_diff(dark_reads[0])}")
 
-    reference_files = [file for file in files if 'reference' in file.name]
+    # reference_files = [file for file in files if 'reference' in file.name]
+    reference_files = []
+    for file in files:
+        for reference_name in REFERENCE_NAMES:
+            if reference_name in file.name.lower():
+                reference_files.append(file)
+
     reference_times = np.array([time_func(file.path) for file in reference_files])
     reference_reads = [read_txt(file.path) for file in reference_files]
     for i in range(len(reference_files)):
         if not (reference_reads[0] == reference_reads[i]):
-            warnings.warn(f"{reference_files[i].name}: {reference_reads[i].give_diff(reference_reads[0])}")
+            raise ValueError(f"{reference_files[i].name}: {reference_reads[i].give_diff(reference_reads[0])}")
+
+    if not (dark_reads[0] == reference_reads[0]):
+        raise ValueError(f"{reference_files[0].name}: {reference_reads[0].give_diff(dark_reads[0])}")
 
     hdf5_place.attrs.create('wavelength', dark_reads[0].wavelength)
     hdf5_place.attrs.create('integration_time_ms', dark_reads[0].integration_time)
@@ -136,21 +151,13 @@ def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dict
     hdf5_place.attrs.create('notes', notes)
 
     for file in os.scandir(loc):
-        if (('dark' in file.name) or ('reference' in file.name) or file.name.endswith('.hdf5') or 'notes' in file.name
-                or 'pH' in file.name or 'conductivity' in file.name):
-            continue
-
-        f_s = False
-        for specie in SPECIES:
-            if specie in file.name:
-                f_s = True
-        if f_s:
+        if check_skip(file):
             continue
 
         data = read_txt(file.path)
 
         if not (data == dark_reads[0]):
-            warnings.warn(f"{file.name}: {data.give_diff(dark_reads[0])}")
+            raise ValueError(f"{file.name}: {data.give_diff(dark_reads[0])}")
 
         best_dark_index, best_reference_index = 0, 0
         dark_found = True

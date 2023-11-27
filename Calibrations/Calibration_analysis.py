@@ -9,6 +9,9 @@ import lmfit
 from Data_handling.Import import DataSet
 
 
+plt.rcParams.update({'font.size': 14})
+
+
 class Analyzer(DataSet):
     def __init__(self, variable_display_name, *args, variable_factor=1, cmap='jet', **kwargs):
         super().__init__(*args, **kwargs)
@@ -111,7 +114,7 @@ class Analyzer(DataSet):
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'absorbance vs wavelength with variable {save_suffix}.png'))
+            plt.savefig(os.path.join(save_loc, f'absorbance vs wavelength with variable{save_suffix}.png'))
 
     def absorbance_vs_variable_with_wavelength(self, *, corrected=True, masked=True, save_loc=None, num='plot',
                                                wavelength_plot_every=5, save_suffix='', plot_kwargs={}):
@@ -171,6 +174,10 @@ class Analyzer(DataSet):
         for i in range(len(self.wavelength_masked)):
             linearity_corrected_num[i] = scipy.stats.pearsonr(self.variable_num, self.get_absorbances(True, masked, num)[:, i])[0]
 
+        linearity_best_num = np.zeros(len(self.wavelength_masked))
+        for i in range(len(self.wavelength_masked)):
+            linearity_best_num[i] = scipy.stats.pearsonr(self.variable_best_num, self.get_absorbances(True, masked, 'best')[:, i])[0]
+
         linearity_uncorrected = np.zeros(len(self.wavelength_masked))
         for i in range(len(self.wavelength_masked)):
             linearity_uncorrected[i] = scipy.stats.pearsonr(self.variable, self.get_absorbances(False, masked)[:, i])[0]
@@ -179,15 +186,22 @@ class Analyzer(DataSet):
         for i in range(len(self.wavelength_masked)):
             linearity_uncorrected_num[i] = scipy.stats.pearsonr(self.variable_num, self.get_absorbances(False, masked, num)[:, i])[0]
 
-        linearity_best_num = np.zeros(len(self.wavelength_masked))
+        linearity_uncorrected_best_num = np.zeros(len(self.wavelength_masked))
         for i in range(len(self.wavelength_masked)):
-            linearity_best_num[i] = scipy.stats.pearsonr(self.variable_best_num, self.absorbances_masked_best_num[:, i])[0]
+            linearity_uncorrected_best_num[i] = \
+            scipy.stats.pearsonr(self.variable_best_num, self.get_absorbances(False, masked, 'best')[:, i])[0]
 
-        r2_mask = (((r2_values[0] < linearity_uncorrected ** 2) & (linearity_uncorrected ** 2 < r2_values[1]))
-                 | ((r2_values[0] < linearity_uncorrected_num ** 2) & (linearity_uncorrected_num ** 2 < r2_values[1]))
-                 | ((r2_values[0] < linearity_best_num ** 2) & (linearity_best_num ** 2 < r2_values[1]))
-                 | ((r2_values[0] < linearity ** 2) & (linearity ** 2 < r2_values[1]))
-                 | ((r2_values[0] < linearity_corrected_num ** 2) & (linearity_corrected_num ** 2 < r2_values[1])))
+        r2_mask = (r2_values[0] < linearity ** 2) & (linearity ** 2 < r2_values[1])
+        lins = [linearity_corrected_num, linearity_best_num, linearity_uncorrected, linearity_uncorrected_num,
+                linearity_uncorrected_best_num]
+        for lin in lins:
+            r2_mask = r2_mask | ((r2_values[0] < lin ** 2) & (lin ** 2 < r2_values[1]))
+
+        # r2_mask = (((r2_values[0] < linearity_uncorrected ** 2) & (linearity_uncorrected ** 2 < r2_values[1]))
+        #          | ((r2_values[0] < linearity_uncorrected_num ** 2) & (linearity_uncorrected_num ** 2 < r2_values[1]))
+        #          | ((r2_values[0] < linearity_best_num ** 2) & (linearity_best_num ** 2 < r2_values[1]))
+        #          | ((r2_values[0] < linearity ** 2) & (linearity ** 2 < r2_values[1]))
+        #          | ((r2_values[0] < linearity_corrected_num ** 2) & (linearity_corrected_num ** 2 < r2_values[1])))
 
         wavs = self.wavelength_masked[r2_mask]
         dw = np.diff(wavs)
@@ -198,9 +212,10 @@ class Analyzer(DataSet):
         fig, ax = plt.subplots()
         plt.plot(self.wavelength_masked[r2_mask], linearity[r2_mask] ** 2, label='corrected')
         plt.plot(self.wavelength_masked[r2_mask], linearity_corrected_num[r2_mask] ** 2, label='corrected num')
+        plt.plot(self.wavelength_masked[r2_mask], linearity_best_num[r2_mask] ** 2, label='best num')
         plt.plot(self.wavelength_masked[r2_mask], linearity_uncorrected[r2_mask] ** 2, label='uncorrected')
         plt.plot(self.wavelength_masked[r2_mask], linearity_uncorrected_num[r2_mask] ** 2, label='uncorrected num')
-        plt.plot(self.wavelength_masked[r2_mask], linearity_best_num[r2_mask] ** 2, label='best num')
+        plt.plot(self.wavelength_masked[r2_mask], linearity_uncorrected_best_num[r2_mask] ** 2, label='uncorrected best num')
         plt.xlabel('Wavelength (nm)')
         plt.ylabel('Linearity coefficient')
         plt.grid()
@@ -232,6 +247,13 @@ class Analyzer(DataSet):
             slope_corrected_num[i] = result.params['slope'].value
             slope_corrected_num_std[i] = result.params['slope'].stderr
 
+        slope_best_num = np.zeros(len(self.wavelength_masked))
+        slope_best_num_std = np.zeros(len(self.wavelength_masked))
+        for i in range(len(self.wavelength_masked)):
+            result = lin_model.fit(self.get_absorbances(True, masked, 'best')[:, i], params, x=self.variable_best_num)
+            slope_best_num[i] = result.params['slope'].value
+            slope_best_num_std[i] = result.params['slope'].stderr
+
         slope_uncorrected = np.zeros(len(self.wavelength_masked))
         slope_uncorrected_std = np.zeros(len(self.wavelength_masked))
         for i in range(len(self.wavelength_masked)):
@@ -246,19 +268,20 @@ class Analyzer(DataSet):
             slope_uncorrected_num[i] = result.params['slope'].value
             slope_uncorrected_num_std[i] = result.params['slope'].stderr
 
-        slope_best_num = np.zeros(len(self.wavelength_masked))
-        slope_best_num_std = np.zeros(len(self.wavelength_masked))
+        slope_uncorrected_best_num = np.zeros(len(self.wavelength_masked))
+        slope_uncorrected_best_num_std = np.zeros(len(self.wavelength_masked))
         for i in range(len(self.wavelength_masked)):
-            result = lin_model.fit(self.get_absorbances(True, masked, 'best')[:, i], params, x=self.variable_best_num)
-            slope_best_num[i] = result.params['slope'].value
-            slope_best_num_std[i] = result.params['slope'].stderr
+            result = lin_model.fit(self.get_absorbances(False, masked, 'best')[:, i], params, x=self.variable_best_num)
+            slope_uncorrected_best_num[i] = result.params['slope'].value
+            slope_uncorrected_best_num_std[i] = result.params['slope'].stderr
 
         fig, ax = plt.subplots()
         plt.errorbar(self.wavelength_masked, slope, yerr=slope_std, label='corrected')
         plt.errorbar(self.wavelength_masked, slope_corrected_num, yerr=slope_corrected_num_std, label='corrected num')
+        plt.errorbar(self.wavelength_masked, slope_best_num, yerr=slope_best_num_std, label='best num')
         plt.errorbar(self.wavelength_masked, slope_uncorrected, yerr=slope_uncorrected_std, label='uncorrected')
         plt.errorbar(self.wavelength_masked, slope_uncorrected_num, yerr=slope_uncorrected_num_std, label='uncorrected num')
-        plt.errorbar(self.wavelength_masked, slope_best_num, yerr=slope_best_num_std, label='best num')
+        plt.errorbar(self.wavelength_masked, slope_uncorrected_best_num, yerr=slope_uncorrected_best_num_std, label='uncorrected best num')
         plt.xlabel('Wavelength (nm)')
         plt.ylabel('Slope')
         plt.legend()
@@ -273,19 +296,23 @@ class Analyzer(DataSet):
             plt.close()
 
         # plot relative slope
-        mask = self.absorbances_masked[-1] > 0.05 * np.max(self.absorbances_masked[-1])
+        intensity = self.get_absorbances(True, True, 'plot', np.max(self.variable))
+        mask = intensity > 0.05 * np.max(intensity)
+
         y_min, y_max = np.min(slope_uncorrected[mask] / self.absorbances_masked[-1][mask]), np.max(
             slope_uncorrected[mask] / self.absorbances_masked[-1][mask])
         dy = y_max - y_min
         y_min -= 0.1 * dy
         y_max += 0.1 * dy
 
+
         fig, ax = plt.subplots()
         plt.plot(self.wavelength_masked, slope / self.absorbances_masked_corrected[-1], label='corrected')
         plt.plot(self.wavelength_masked, slope_corrected_num / self.absorbances_masked_corrected_num[-1], label='corrected num')
+        plt.plot(self.wavelength_masked, slope_best_num / self.absorbances_masked_best_num[-1], label='best num')
         plt.plot(self.wavelength_masked, slope_uncorrected / self.absorbances_masked[-1], label='uncorrected')
         plt.plot(self.wavelength_masked, slope_uncorrected_num / self.absorbances_masked_num[-1], label='uncorrected num')
-        plt.plot(self.wavelength_masked, slope_best_num / self.absorbances_masked_best_num[-1], label='best num')
+        plt.plot(self.wavelength_masked, slope_uncorrected_best_num / self.absorbances_masked_best_num[-1], label='uncorrected best num')
         plt.xlabel('Wavelength (nm)')
         plt.ylabel('Relative slope')
         plt.legend()
@@ -366,25 +393,28 @@ class Analyzer(DataSet):
         params = lmfit.Parameters()
         params.add('a', value=1, vary=True)
 
-        result = lmfit.minimize(residual, params, args=(self.absorbances_masked_corrected,),
+        result = lmfit.minimize(residual, params, args=(self.get_absorbances(True, True),),
                                 kws={'concentration': self.variable[:, np.newaxis]})
-        result_num = lmfit.minimize(residual, params, args=(self.absorbances_masked_corrected_num,),
+        result_num = lmfit.minimize(residual, params, args=(self.get_absorbances(True, True, 'plot'),),
                                     kws={'concentration': self.variable_num[:, np.newaxis]})
-        result_uncorr = lmfit.minimize(residual, params, args=(self.absorbances_masked,),
-                                       kws={'concentration': self.variable[:, np.newaxis]})
-        result_uncorr_num = lmfit.minimize(residual, params, args=(self.absorbances_masked_num,),
-                                           kws={'concentration': self.variable_num[:, np.newaxis]})
-        result_best_num = lmfit.minimize(residual, params, args=(self.absorbances_masked_best_num,),
+        result_best_num = lmfit.minimize(residual, params, args=(self.get_absorbances(True, True, 'best'),),
                                          kws={'concentration': self.variable_best_num[:, np.newaxis]})
+        result_uncorr = lmfit.minimize(residual, params, args=(self.get_absorbances(False, True),),
+                                       kws={'concentration': self.variable[:, np.newaxis]})
+        result_uncorr_num = lmfit.minimize(residual, params, args=(self.get_absorbances(False, True, 'plot'),),
+                                           kws={'concentration': self.variable_num[:, np.newaxis]})
+        result_uncorr_best_num = lmfit.minimize(residual, params, args=(self.get_absorbances(False, True, 'best'),),
+                                                kws={'concentration': self.variable_best_num[:, np.newaxis]})
 
         print(
         f"""
         # Fit report
         corrected: {result.params['a'].value:.3f} ± {result.params['a'].stderr:.3f}
         corrected num: {result_num.params['a'].value:.3f} ± {result_num.params['a'].stderr:.3f}
+        best num: {result_best_num.params['a'].value:.3f} ± {result_best_num.params['a'].stderr:.3f}
         uncorrected: {result_uncorr.params['a'].value:.3f} ± {result_uncorr.params['a'].stderr:.3f}
         uncorrected num: {result_uncorr_num.params['a'].value:.3f} ± {result_uncorr_num.params['a'].stderr:.3f}
-        best num: {result_best_num.params['a'].value:.3f} ± {result_best_num.params['a'].stderr:.3f}
+        uncorrected best num: {result_uncorr_best_num.params['a'].value:.3f} ± {result_uncorr_best_num.params['a'].stderr:.3f}
         """)
 
 # plt.figure()
