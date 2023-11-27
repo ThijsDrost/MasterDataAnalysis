@@ -40,7 +40,7 @@ class Analyzer(DataSet):
             ax.legend(title=legend)
         # ax.tight_layout()
 
-    def absorbance_vs_wavelength_with_num(self, *, corrected=True, masked=True, save_loc=None, show=False, **plot_kwargs):
+    def absorbance_vs_wavelength_with_num(self, *, corrected=True, masked=True, save_loc=None, show=False, plot_kwargs):
         for value in np.unique(self.variable):
             wav = self.get_wavelength(masked)
             fig, ax = plt.subplots()
@@ -60,7 +60,7 @@ class Analyzer(DataSet):
     
     def absorbance_vs_measurement_num_with_wavelength(self, *, corrected=True, masked=True, save_loc=None, num='plot',
                                                       wavelength_plot_every=5, min_absorbance=0.02, show=False,
-                                                      **plot_kwargs):
+                                                      plot_kwargs):
         cmap = plt.get_cmap(self.cmap)
         for value in np.unique(self.variable):
             fig, ax = plt.subplots()
@@ -87,7 +87,7 @@ class Analyzer(DataSet):
 
 # plot absorbance vs variable
     def absorbance_vs_wavelength_with_variable(self, *, corrected=True, masked=True, save_loc=None, num='plot',
-                                               **plot_kwargs):
+                                               plot_kwargs):
         fig, ax = plt.subplots()
         for index, var in enumerate(np.unique(self.variable)):
             plt.plot(self.wavelength_masked, self.get_absorbances(corrected, masked, num, var).T, f'C{index}',
@@ -101,7 +101,7 @@ class Analyzer(DataSet):
             plt.savefig(os.path.join(save_loc, f'absorbance vs wavelength.png'))
 
     def absorbance_vs_variable_with_wavelength(self, *, corrected=True, masked=True, save_loc=None, num='plot',
-                                               wavelength_plot_every=5, **plot_kwargs):
+                                               wavelength_plot_every=5, plot_kwargs):
         cmap = plt.get_cmap(self.cmap)
         fig, ax = plt.subplots()
         for index, wav in enumerate(self.wavelength_masked[::wavelength_plot_every]):
@@ -120,7 +120,7 @@ class Analyzer(DataSet):
             plt.savefig(os.path.join(save_loc, f'absorbance vs {self.variable_name}.png'))
 
     def relative_absorbance_vs_variable_with_wavelength(self, *, corrected=True, masked=True, num='plot', save_loc=None,
-                                                        wavelength_plot_every=5, min_absorbance=0.02, **plot_kwargs):
+                                                        wavelength_plot_every=5, min_absorbance=0.02, plot_kwargs):
         cmap = plt.get_cmap(self.cmap)
         fig, ax = plt.subplots()
         wav_abs_mask = self.get_absorbances(corrected, masked, num, None)[-1, :] > min_absorbance
@@ -143,7 +143,7 @@ class Analyzer(DataSet):
 # pearson r for each wavelength
     def pearson_r_vs_wavelength_with_methods(self, *, save_loc=None, r2_values=None, masked=True, num='plot',
                                              plot_name=f'linearity vs wavelength zoomed method comparison.png',
-                                             **plot_kwargs):
+                                             plot_kwargs):
         if r2_values is None:
             r2_values = [0, 1]
         if num == 'all' or num == 'best':
@@ -199,7 +199,7 @@ class Analyzer(DataSet):
         if save_loc is not None:
             plt.savefig(os.path.join(save_loc, plot_name))
 
-    def linear_fit_vs_wavelength_with_methods(self, *, save_loc=None, masked=True, num='plot', show=True, **plot_kwargs):
+    def linear_fit_vs_wavelength_with_methods(self, *, save_loc=None, masked=True, num='plot', show=True, plot_kwargs):
         # linear fit for each wavelength
         lin_model = lmfit.models.LinearModel()
         params = lin_model.make_params()
@@ -290,7 +290,7 @@ class Analyzer(DataSet):
 
 
     def relative_intensity_fit_vs_variable(self, *, corrected=True, masked=True, save_loc=None, num='plot', show=True,
-                                           reference_line, **plot_kwargs):
+                                           reference_line, plot_kwargs):
         def residual(pars, x, reference):
             a = pars['a'].value
             return x - a * reference
