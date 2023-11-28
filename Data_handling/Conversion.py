@@ -9,9 +9,9 @@ from Backend import read_txt, get_time, get_time_rel
 
 
 def main():
-    loc = r'E:\OneDrive - TU Eindhoven\Master thesis\Measurements\Calibration\NO2 (1)'
+    loc = r'E:\OneDrive - TU Eindhoven\Master thesis\Measurements\Calibration\H2O2 pH 2'
     time_index = 0
-    find_index = 0
+    find_index = 1
     make_hdf5(loc, TIME_FUNCS[time_index], FIND_METHODS[find_index])
 
 # time index 0 uses the modification time of the file (getmtime) to get timestamp, which is conserved when files are

@@ -13,7 +13,7 @@ plt.rcParams.update({'font.size': 14})
 
 
 class Analyzer(DataSet):
-    def __init__(self, variable_display_name, *args, variable_factor=1, cmap='jet', **kwargs):
+    def __init__(self, variable_display_name, *args, variable_factor=1, cmap='turbo', **kwargs):
         super().__init__(*args, **kwargs)
         self.variable_factor = variable_factor
         self.variable_display_name = variable_display_name
@@ -30,7 +30,7 @@ class Analyzer(DataSet):
         return self.wavelength_masked if masked else self.wavelength
 
     @staticmethod
-    def _setting_setter(ax, xlabel='', ylabel='', title='', grid=True, legend='', xlim=None, ylim=None, xticks=None,
+    def _setting_setter(ax, *, xlabel='', ylabel='', title='', grid=True, xlim=None, ylim=None, xticks=None,
                         yticks=None, xscale=None, yscale=None):
         if xlabel:
             ax.set_xlabel(xlabel)
@@ -39,9 +39,7 @@ class Analyzer(DataSet):
         if title:
             ax.set_title(title)
         if grid:
-            ax.grid()
-        if legend:
-            ax.legend(title=legend)
+            ax.grid(grid)
         if xlim:
             ax.set_xlim(xlim)
         if ylim:
@@ -56,7 +54,8 @@ class Analyzer(DataSet):
             ax.set_yscale(yscale)
         # ax.tight_layout()
 
-    def absorbance_vs_wavelength_with_num(self, *, corrected=True, masked=True, save_loc=None, show=False, save_suffix='', plot_kwargs={}):
+    def absorbance_vs_wavelength_with_num(self, *, corrected=True, masked=True, save_loc=None, show=False,
+                                          save_suffix='', plot_kwargs={}, legend_kwargs={}):
         for value in np.unique(self.variable):
             wav = self.get_wavelength(masked)
             fig, ax = plt.subplots()
@@ -64,7 +63,7 @@ class Analyzer(DataSet):
                 plt.plot(wav, self.get_absorbances(corrected, masked, num, value).T, f'C{index}', label=num)
             plt.xlabel('Wavelength (nm)')
             plt.ylabel('Absorbance')
-            plt.legend(title='num')
+            plt.legend(title='num', **legend_kwargs)
             self._setting_setter(ax, **plot_kwargs)
             plt.tight_layout()
             if save_loc is not None:
@@ -103,14 +102,14 @@ class Analyzer(DataSet):
 
 # plot absorbance vs variable
     def absorbance_vs_wavelength_with_variable(self, *, corrected=True, masked=True, save_loc=None, num='plot',
-                                               save_suffix='', plot_kwargs={}):
+                                               save_suffix='', plot_kwargs={}, legend_kwargs={}):
         fig, ax = plt.subplots()
         for index, var in enumerate(np.unique(self.variable)):
             plt.plot(self.wavelength_masked, self.get_absorbances(corrected, masked, num, var).T, f'C{index}',
                      label=self.variable_factor * var)
         plt.xlabel('Wavelength (nm)')
         plt.ylabel('Absorbance')
-        plt.legend(title=self.variable_display_name)
+        plt.legend(title=self.variable_display_name, **legend_kwargs)
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
         if save_loc is not None:
@@ -158,7 +157,7 @@ class Analyzer(DataSet):
 
 # pearson r for each wavelength
     def pearson_r_vs_wavelength_with_methods(self, *, save_loc=None, r2_values=None, masked=True, num='plot',
-                                             save_suffix='', plot_kwargs={}):
+                                             save_suffix='', plot_kwargs={}, legend_kwargs={}):
         if r2_values is None:
             r2_values = [0, 1]
         if num == 'all' or num == 'best':
@@ -212,21 +211,22 @@ class Analyzer(DataSet):
         fig, ax = plt.subplots()
         plt.plot(self.wavelength_masked[r2_mask], linearity[r2_mask] ** 2, label='corrected')
         plt.plot(self.wavelength_masked[r2_mask], linearity_corrected_num[r2_mask] ** 2, label='corrected num')
-        plt.plot(self.wavelength_masked[r2_mask], linearity_best_num[r2_mask] ** 2, label='best num')
+        plt.plot(self.wavelength_masked[r2_mask], linearity_best_num[r2_mask] ** 2, label='corrected best num')
         plt.plot(self.wavelength_masked[r2_mask], linearity_uncorrected[r2_mask] ** 2, label='uncorrected')
         plt.plot(self.wavelength_masked[r2_mask], linearity_uncorrected_num[r2_mask] ** 2, label='uncorrected num')
         plt.plot(self.wavelength_masked[r2_mask], linearity_uncorrected_best_num[r2_mask] ** 2, label='uncorrected best num')
         plt.xlabel('Wavelength (nm)')
         plt.ylabel('Linearity coefficient')
         plt.grid()
-        plt.legend()
+        plt.legend(**legend_kwargs)
         plt.ylim(*r2_values)
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
         if save_loc is not None:
             plt.savefig(os.path.join(save_loc, f'pearson r^2 vs wavelength method comparison{save_suffix}.png'))
 
-    def linear_fit_vs_wavelength_with_methods(self, *, save_loc=None, masked=True, num='plot', show=True, save_suffix='', plot_kwargs={}):
+    def linear_fit_vs_wavelength_with_methods(self, *, save_loc=None, masked=True, num='plot', show=True,
+                                              save_suffix='', plot_kwargs={}, legend_kwargs={}):
         # linear fit for each wavelength
         lin_model = lmfit.models.LinearModel()
         params = lin_model.make_params()
@@ -278,13 +278,13 @@ class Analyzer(DataSet):
         fig, ax = plt.subplots()
         plt.errorbar(self.wavelength_masked, slope, yerr=slope_std, label='corrected')
         plt.errorbar(self.wavelength_masked, slope_corrected_num, yerr=slope_corrected_num_std, label='corrected num')
-        plt.errorbar(self.wavelength_masked, slope_best_num, yerr=slope_best_num_std, label='best num')
+        plt.errorbar(self.wavelength_masked, slope_best_num, yerr=slope_best_num_std, label='corrected best num')
         plt.errorbar(self.wavelength_masked, slope_uncorrected, yerr=slope_uncorrected_std, label='uncorrected')
         plt.errorbar(self.wavelength_masked, slope_uncorrected_num, yerr=slope_uncorrected_num_std, label='uncorrected num')
         plt.errorbar(self.wavelength_masked, slope_uncorrected_best_num, yerr=slope_uncorrected_best_num_std, label='uncorrected best num')
         plt.xlabel('Wavelength (nm)')
         plt.ylabel('Slope')
-        plt.legend()
+        plt.legend(**legend_kwargs)
         plt.grid()
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
@@ -309,13 +309,13 @@ class Analyzer(DataSet):
         fig, ax = plt.subplots()
         plt.plot(self.wavelength_masked, slope / self.absorbances_masked_corrected[-1], label='corrected')
         plt.plot(self.wavelength_masked, slope_corrected_num / self.absorbances_masked_corrected_num[-1], label='corrected num')
-        plt.plot(self.wavelength_masked, slope_best_num / self.absorbances_masked_best_num[-1], label='best num')
+        plt.plot(self.wavelength_masked, slope_best_num / self.absorbances_masked_best_num[-1], label='corrected best num')
         plt.plot(self.wavelength_masked, slope_uncorrected / self.absorbances_masked[-1], label='uncorrected')
         plt.plot(self.wavelength_masked, slope_uncorrected_num / self.absorbances_masked_num[-1], label='uncorrected num')
         plt.plot(self.wavelength_masked, slope_uncorrected_best_num / self.absorbances_masked_best_num[-1], label='uncorrected best num')
         plt.xlabel('Wavelength (nm)')
         plt.ylabel('Relative slope')
-        plt.legend()
+        plt.legend(**legend_kwargs)
         plt.grid()
         plt.ylim(y_min, y_max)
         self._setting_setter(ax, **plot_kwargs)
@@ -329,7 +329,7 @@ class Analyzer(DataSet):
 
 
     def relative_intensity_fit_vs_variable(self, *, corrected=True, masked=True, save_loc=None, num='plot', show=True,
-                                           reference_line, save_suffix='', plot_kwargs={}):
+                                           reference_line, save_suffix='', plot_kwargs={}, legend_kwargs={}):
         def residual(pars, x, reference):
             a = pars['a'].value
             return x - a * reference
@@ -373,7 +373,7 @@ class Analyzer(DataSet):
         # plt.plot(self.wavelength_masked, self.absorbances_masked.T/ratio, label=self.variable)
         plt.xlabel('Wavelength (nm)')
         plt.ylabel('Relative absorbance (A.U.)')
-        plt.legend(lines, labels, title=self.variable_display_name)
+        plt.legend(lines, labels, title=self.variable_display_name, **legend_kwargs)
         plt.grid()
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
@@ -411,7 +411,7 @@ class Analyzer(DataSet):
         # Fit report
         corrected: {result.params['a'].value:.3f} ± {result.params['a'].stderr:.3f}
         corrected num: {result_num.params['a'].value:.3f} ± {result_num.params['a'].stderr:.3f}
-        best num: {result_best_num.params['a'].value:.3f} ± {result_best_num.params['a'].stderr:.3f}
+        corrected best num: {result_best_num.params['a'].value:.3f} ± {result_best_num.params['a'].stderr:.3f}
         uncorrected: {result_uncorr.params['a'].value:.3f} ± {result_uncorr.params['a'].stderr:.3f}
         uncorrected num: {result_uncorr_num.params['a'].value:.3f} ± {result_uncorr_num.params['a'].stderr:.3f}
         uncorrected best num: {result_uncorr_best_num.params['a'].value:.3f} ± {result_uncorr_best_num.params['a'].stderr:.3f}
