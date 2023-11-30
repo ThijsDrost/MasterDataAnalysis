@@ -38,8 +38,9 @@ def import_hdf5(loc, dependent):
         else:
             results = []
             for group in file.keys():
-                if isinstance(file[group], h5py.Group):
-                    raise NotImplementedError('Nested groups are not implemented.')
+                for thing in file[group].keys():
+                    if isinstance(file[group][thing], h5py.Group):
+                        raise NotImplementedError('Nested groups are not implemented.')
                 results.append(import_datasets(file[group], dependent))
             return results
 
@@ -51,7 +52,10 @@ def import_datasets(h5py_file, variable_name):
     number = []
     for key in h5py_file.keys():
         absorbance.append(h5py_file[key][:])
-        variable.append(h5py_file[key].attrs[variable_name])
+        if variable_name is not None:
+            variable.append(h5py_file[key].attrs[variable_name])
+        else:
+            variable.append(0)
         number.append(int(key.split('_')[1].split('.')[0]))
     absorbance = np.array(absorbance)
     variable = np.array(variable)
@@ -273,7 +277,7 @@ class DataSet(SimpleDataSet):
             raise TypeError(f"Can't add {type(other)} to DataSet")
 
 
-class InterpolationCalibrationSet(SimpleDataSet):
+class InterpolationSet(SimpleDataSet):
     def __init__(self, wavelength, absorbances, variable, variable_name, add_zero=True):
         if add_zero:
             absorbances = np.concatenate((np.zeros((1, absorbances.shape[1])), absorbances))
@@ -286,8 +290,18 @@ class InterpolationCalibrationSet(SimpleDataSet):
 
     @staticmethod
     def from_simple(simple_data_set, add_zero=True):
-        return InterpolationCalibrationSet(simple_data_set.wavelength, simple_data_set.absorbances, simple_data_set.variable,
-                                           simple_data_set.variable_name, add_zero)
+        return InterpolationSet(simple_data_set.wavelength, simple_data_set.absorbances, simple_data_set.variable,
+                                simple_data_set.variable_name, add_zero)
+
+    def closest(self, variable_value):
+        if variable_value in self.variable:
+            return self[self.variable == variable_value]
+        else:
+            return self._closest(variable_value)
+
+    def _closest(self, variable_value):
+        index = np.argmin(np.abs(self.variable - variable_value))
+        return self.absorbances[index]
 
     def interpolate(self, variable_value):
         if variable_value < np.min(self.variable) or variable_value > np.max(self.variable):

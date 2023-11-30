@@ -67,7 +67,7 @@ class Analyzer(DataSet):
             self._setting_setter(ax, **plot_kwargs)
             plt.tight_layout()
             if save_loc is not None:
-                plt.savefig(os.path.join(save_loc, f'absorbance vs wavelength at {value} {self.variable_name}{save_suffix}.png'))
+                plt.savefig(os.path.join(save_loc, f'absorbance vs wavelength at {value} {self.variable_name}{save_suffix}.pdf'))
             if show:
                 plt.show()
             else:
@@ -94,7 +94,7 @@ class Analyzer(DataSet):
             self._setting_setter(ax, **plot_kwargs)
             plt.tight_layout()
             if save_loc is not None:
-                plt.savefig(os.path.join(save_loc, f'absorbance vs measurement num at {value} {self.variable_name}{save_suffix}.png'))
+                plt.savefig(os.path.join(save_loc, f'absorbance vs measurement num at {value} {self.variable_name}{save_suffix}.pdf'))
             if show:
                 plt.show()
             else:
@@ -113,7 +113,7 @@ class Analyzer(DataSet):
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'absorbance vs wavelength with variable{save_suffix}.png'))
+            plt.savefig(os.path.join(save_loc, f'absorbance vs wavelength with variable{save_suffix}.pdf'))
 
     def absorbance_vs_variable_with_wavelength(self, *, corrected=True, masked=True, save_loc=None, num='plot',
                                                wavelength_plot_every=5, save_suffix='', plot_kwargs={}):
@@ -132,7 +132,7 @@ class Analyzer(DataSet):
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'absorbance vs {self.variable_name} with wavelength{save_suffix}.png'))
+            plt.savefig(os.path.join(save_loc, f'absorbance vs {self.variable_name} with wavelength{save_suffix}.pdf'))
 
     def relative_absorbance_vs_variable_with_wavelength(self, *, corrected=True, masked=True, num='plot', save_loc=None,
                                                         wavelength_plot_every=5, min_absorbance=0.02, save_suffix='', plot_kwargs={}):
@@ -153,13 +153,13 @@ class Analyzer(DataSet):
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'relative absorbance vs {self.variable_name} with wavelength{save_suffix}.png'))
+            plt.savefig(os.path.join(save_loc, f'relative absorbance vs {self.variable_name} with wavelength{save_suffix}.pdf'))
 
 # pearson r for each wavelength
     def pearson_r_vs_wavelength_with_methods(self, *, save_loc=None, r2_values=None, masked=True, num='plot',
                                              save_suffix='', plot_kwargs={}, legend_kwargs={}):
         if r2_values is None:
-            r2_values = [0, 1]
+            r2_values = [0, 1.025]
         if num == 'all' or num == 'best':
             warnings.warn(f'num = "{num}" is not logical for pearson_r_vs_wavelength_with_methods, should be "plot" or'
                           f' an integer, "plot" is used instead')
@@ -223,7 +223,7 @@ class Analyzer(DataSet):
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'pearson r^2 vs wavelength method comparison{save_suffix}.png'))
+            plt.savefig(os.path.join(save_loc, f'pearson r^2 vs wavelength method comparison{save_suffix}.pdf'))
 
     def linear_fit_vs_wavelength_with_methods(self, *, save_loc=None, masked=True, num='plot', show=True,
                                               save_suffix='', plot_kwargs={}, legend_kwargs={}):
@@ -289,7 +289,7 @@ class Analyzer(DataSet):
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'slope vs wavelength method comparison {save_suffix}.png'))
+            plt.savefig(os.path.join(save_loc, f'slope vs wavelength method comparison {save_suffix}.pdf'))
         if show:
             plt.show()
         else:
@@ -321,7 +321,7 @@ class Analyzer(DataSet):
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'relative slope vs wavelength method comparison{save_suffix}.png'))
+            plt.savefig(os.path.join(save_loc, f'relative slope vs wavelength method comparison{save_suffix}.pdf'))
         if show:
             plt.show()
         else:
@@ -358,7 +358,7 @@ class Analyzer(DataSet):
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'Relative intensity vs {self.variable_name} method comparison{save_suffix}.png'))
+            plt.savefig(os.path.join(save_loc, f'Relative intensity vs {self.variable_name} method comparison{save_suffix}.pdf'))
         if show:
             plt.show()
         else:
@@ -378,7 +378,7 @@ class Analyzer(DataSet):
         self._setting_setter(ax, **plot_kwargs)
         plt.tight_layout()
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'Relative absorbance vs wavelength method comparison{save_suffix}.png'))
+            plt.savefig(os.path.join(save_loc, f'Relative absorbance vs wavelength method comparison{save_suffix}.pdf'))
         if show:
             plt.show()
         else:

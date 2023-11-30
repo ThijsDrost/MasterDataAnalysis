@@ -30,7 +30,7 @@ TIME_FUNCS = [lambda file: os.path.getmtime(file),
               lambda file: get_time_rel(file)]
 SPECIES = ['NO2-', 'H2O2', 'NO3-']
 SKIP_NAMES = ['dark', '.hdf5', 'notes', 'pH', 'conductivity']
-FIND_METHODS = ['closest_before', 'closest']
+FIND_METHODS = ['closest_before', 'closest', None]
 REFERENCE_NAMES = ['ref', 'reference']
 # DARK_NAMES = ['dark']
 
@@ -120,34 +120,36 @@ def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dict
 
     files = [file for file in os.scandir(loc) if file.is_file()]
 
-    dark_files = [file for file in files if 'dark' in file.name]
-    dark_times = np.array([time_func(file.path) for file in dark_files])
-    dark_reads = [read_txt(file.path) for file in dark_files]
-    if len(dark_reads) > 1:
-        for i in range(1, len(dark_reads)):
-            if not (dark_reads[0] == dark_reads[i]):
-                raise ValueError(f"{dark_files[i].name}: {dark_reads[i].give_diff(dark_reads[0])}")
+    if find_method is not None:
+        dark_files = [file for file in files if 'dark' in file.name]
+        dark_times = np.array([time_func(file.path) for file in dark_files])
+        dark_reads = [read_txt(file.path) for file in dark_files]
+        if len(dark_reads) > 1:
+            for i in range(1, len(dark_reads)):
+                if not (dark_reads[0] == dark_reads[i]):
+                    raise ValueError(f"{dark_files[i].name}: {dark_reads[i].give_diff(dark_reads[0])}")
 
-    # reference_files = [file for file in files if 'reference' in file.name]
-    reference_files = []
-    for file in files:
-        for reference_name in REFERENCE_NAMES:
-            if reference_name in file.name.lower():
-                reference_files.append(file)
+        # reference_files = [file for file in files if 'reference' in file.name]
+        reference_files = []
+        for file in files:
+            for reference_name in REFERENCE_NAMES:
+                if reference_name in file.name.lower():
+                    reference_files.append(file)
 
-    reference_times = np.array([time_func(file.path) for file in reference_files])
-    reference_reads = [read_txt(file.path) for file in reference_files]
-    for i in range(len(reference_files)):
-        if not (reference_reads[0] == reference_reads[i]):
-            raise ValueError(f"{reference_files[i].name}: {reference_reads[i].give_diff(reference_reads[0])}")
+        reference_times = np.array([time_func(file.path) for file in reference_files])
+        reference_reads = [read_txt(file.path) for file in reference_files]
+        for i in range(len(reference_files)):
+            if not (reference_reads[0] == reference_reads[i]):
+                raise ValueError(f"{reference_files[i].name}: {reference_reads[i].give_diff(reference_reads[0])}")
 
-    if not (dark_reads[0] == reference_reads[0]):
-        raise ValueError(f"{reference_files[0].name}: {reference_reads[0].give_diff(dark_reads[0])}")
+        if not (dark_reads[0] == reference_reads[0]):
+            raise ValueError(f"{reference_files[0].name}: {reference_reads[0].give_diff(dark_reads[0])}")
 
-    hdf5_place.attrs.create('wavelength', dark_reads[0].wavelength)
-    hdf5_place.attrs.create('integration_time_ms', dark_reads[0].integration_time)
-    hdf5_place.attrs.create('smoothing', dark_reads[0].smoothing)
-    hdf5_place.attrs.create('spectrometer', dark_reads[0].spectrometer)
+    temp_read = read_txt(files[0].path)
+    hdf5_place.attrs.create('wavelength', temp_read.wavelength)
+    hdf5_place.attrs.create('integration_time_ms', temp_read.integration_time)
+    hdf5_place.attrs.create('smoothing', temp_read.smoothing)
+    hdf5_place.attrs.create('spectrometer', temp_read.spectrometer)
     hdf5_place.attrs.create('notes', notes)
 
     for file in os.scandir(loc):
@@ -156,38 +158,42 @@ def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dict
 
         data = read_txt(file.path)
 
-        if not (data == dark_reads[0]):
-            raise ValueError(f"{file.name}: {data.give_diff(dark_reads[0])}")
+        if find_method is not None:
+            if not (data == dark_reads[0]):
+                raise ValueError(f"{file.name}: {data.give_diff(dark_reads[0])}")
 
-        best_dark_index, best_reference_index = 0, 0
-        dark_found = True
-        reference_found = True
-        if find_method == 'closest_before':
-            dark_arg = np.argwhere(time_func(file.path) > dark_times)[0]
-            if dark_arg.size == 0:
-                warnings.warn(f"{file.name}: no earlier dark found, closest one used")
-                dark_found = False
-            else:
-                best_dark_index = dark_arg[0]
+            best_dark_index, best_reference_index = 0, 0
+            dark_found = True
+            reference_found = True
+            if find_method == 'closest_before':
+                dark_arg = np.argwhere(time_func(file.path) > dark_times)[0]
+                if dark_arg.size == 0:
+                    warnings.warn(f"{file.name}: no earlier dark found, closest one used")
+                    dark_found = False
+                else:
+                    best_dark_index = dark_arg[0]
 
-            reference_arg = np.argwhere(time_func(file.path) > reference_times)[0]
-            if reference_arg.size == 0:
-                warnings.warn(f"{file.name}: no earlier reference found, closest one used")
-                reference_found = False
-            else:
-                best_reference_index = reference_arg[0]
+                reference_arg = np.argwhere(time_func(file.path) > reference_times)[0]
+                if reference_arg.size == 0:
+                    warnings.warn(f"{file.name}: no earlier reference found, closest one used")
+                    reference_found = False
+                else:
+                    best_reference_index = reference_arg[0]
 
-        if (find_method == 'closest') or not dark_found:
-            best_dark_index = np.argmin(np.abs(time_func(file.path) - dark_times))
-        if (find_method == 'closest') or not reference_found:
-            best_reference_index = np.argmin(np.abs(time_func(file.path) - reference_times))
+            if (find_method == 'closest') or not dark_found:
+                best_dark_index = np.argmin(np.abs(time_func(file.path) - dark_times))
+            if (find_method == 'closest') or not reference_found:
+                best_reference_index = np.argmin(np.abs(time_func(file.path) - reference_times))
 
 
-        absorbance = -np.log10((data.intensity - dark_reads[best_dark_index].intensity) / (
-                    reference_reads[best_reference_index].intensity - dark_reads[best_dark_index].intensity))
+            absorbance = -np.log10((data.intensity - dark_reads[best_dark_index].intensity) / (
+                        reference_reads[best_reference_index].intensity - dark_reads[best_dark_index].intensity))
+
+        else:
+            absorbance = data.intensity
+
         dataset = hdf5_place.create_dataset(file.name, data=absorbance)
         dataset.attrs.create('averaging', data.averaging)
-
         dataset.attrs.create('timestamp_s', time_func(file.path))
 
         if pH is not None:
