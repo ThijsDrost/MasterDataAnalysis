@@ -33,7 +33,7 @@ data = import_hdf5(loc, 'timestamp_s')
 # %%
 wav_range = [210, 300]
 # exclude_range = [215, 225]
-mask = (data[0].wavelength > wav_range[0]) & (data[0].wavelength < wav_range[1]) & ((data[0].wavelength < exclude_range[0]) | (data[0].wavelength > exclude_range[1]))
+mask = (data[0].wavelength > wav_range[0]) & (data[0].wavelength < wav_range[1]) #& ((data[0].wavelength < exclude_range[0]) | (data[0].wavelength > exclude_range[1]))
 ref_H2O2_m = ref_H2O2[mask]
 ref_NO2_m = ref_NO2[mask]
 ref_NO3_m = ref_NO3[mask]
