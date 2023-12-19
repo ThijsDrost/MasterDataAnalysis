@@ -41,9 +41,9 @@ class Analyzer(DataSet):
         if grid:
             ax.grid(grid)
         if xlim:
-            ax.set_xlim(xlim)
+            ax.set_xlim(*xlim)
         if ylim:
-            ax.set_ylim(ylim)
+            ax.set_ylim(*ylim)
         if xticks:
             ax.set_xticks(xticks)
         if yticks:
@@ -54,110 +54,144 @@ class Analyzer(DataSet):
             ax.set_yscale(yscale)
         # ax.tight_layout()
 
-    def absorbance_vs_wavelength_with_num(self, *, corrected=True, masked=True, save_loc=None, show=False,
-                                          save_suffix='', plot_kwargs={}, legend_kwargs={}):
-        for value in np.unique(self.variable):
-            wav = self.get_wavelength(masked)
-            fig, ax = plt.subplots()
-            for index, num in enumerate(self.measurement_num_at_value(value)):
-                plt.plot(wav, self.get_absorbances(corrected, masked, num, value).T, f'C{index}', label=num)
-            plt.xlabel('Wavelength (nm)')
-            plt.ylabel('Absorbance')
-            plt.legend(title='num', **legend_kwargs)
-            self._setting_setter(ax, **plot_kwargs)
-            plt.tight_layout()
-            if save_loc is not None:
-                plt.savefig(os.path.join(save_loc, f'absorbance vs wavelength at {value} {self.variable_name}{save_suffix}.pdf'))
-            if show:
-                plt.show()
+    @staticmethod
+    def _1d_lines(xs, ys, *, colors=None, labels=None, legend_kwargs: dict = None, save_loc: str = None, show: bool = False,
+                  plot_kwargs: dict = None, cbar_kwargs: dict = None, line_kwargs: dict = None, save_kwargs: dict = None):
+        if colors is None:
+            colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        if labels is None:
+            labels = [None] * len(xs)
+
+        if not isinstance(xs[0], (list, np.ndarray)):
+            if len(xs) == len(ys[0]):
+                xs = [xs] * len(ys)
             else:
-                plt.close()
+                raise ValueError('xs and ys must have the same shape or xs must have the same length lists in ys')
+
+        fig, ax = plt.subplots()
+        line_kwargs = line_kwargs or {}
+        for x, y, color, lab in zip(xs, ys, colors, labels):
+            plt.plot(x, y, color, label=lab, **line_kwargs)
+
+        if legend_kwargs is not None:
+            plt.legend(**legend_kwargs)
+        if cbar_kwargs is not None:
+            plt.colorbar(**cbar_kwargs, ax=plt.gca())
+
+        plot_kwargs = plot_kwargs or {}
+        Analyzer._setting_setter(ax, **plot_kwargs)
+
+        plt.tight_layout()
+        if save_loc is not None:
+            save_kwargs = save_kwargs or {}
+            plt.savefig(save_loc, **save_kwargs)
+        if show:
+            plt.show()
+        else:
+            plt.close()
+
+    @staticmethod
+    def set_defaults(kwargs_dict: dict | None, **kwargs) -> dict:
+        kwargs_dict = kwargs_dict or {}
+        for key, value in kwargs.items():
+            if key not in kwargs_dict.keys():
+                kwargs_dict[key] = value
+        return kwargs_dict
+
+    def absorbance_vs_wavelength_with_num(self, *, corrected=True, masked=True, save_loc=None, show=False,
+                                          save_suffix='', plot_kwargs=None, legend_kwargs=None, line_kwargs=None,
+                                          save_kwargs=None, **kwargs):
+        for value in np.unique(self.variable):
+            ys = [self.get_absorbances(corrected, masked, var, value).T for var in self.measurement_num_at_value(value)]
+            labels = list(range(len(ys)))
+            plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel='Wavelength (nm)', ylabel='Absorbance')
+            legend_kwargs = Analyzer.set_defaults(legend_kwargs, title='Measurement number')
+            if save_loc is not None:
+                save_loc = os.path.join(save_loc, f'absorbance vs wavelength at {value} {self.variable_name}{save_suffix}.pdf')
+            self._1d_lines(self.get_wavelength(masked), ys, plot_kwargs=plot_kwargs, legend_kwargs=legend_kwargs,
+                           save_loc=save_loc, show=show, labels=labels, line_kwargs=line_kwargs, save_kwargs=save_kwargs, **kwargs)
     
     def absorbance_vs_measurement_num_with_wavelength(self, *, corrected=True, masked=True, save_loc=None, num='plot',
                                                       wavelength_plot_every=5, min_absorbance=0.02, show=False,
-                                                      save_suffix='', plot_kwargs={}):
+                                                      save_suffix='', plot_kwargs=None, cbar_kwargs=None, line_kwargs=None,
+                                                      save_kwargs=None, **kwargs):
         cmap = plt.get_cmap(self.cmap)
         for value in np.unique(self.variable):
-            fig, ax = plt.subplots()
             wav_abs_mask = self.get_absorbances(corrected, masked, num, value)[-1, :] > min_absorbance
-            for index, wav in enumerate(self.wavelength_masked[wav_abs_mask][::wavelength_plot_every]):
-                val1 = self.get_absorbances(corrected, masked, 'all', value)
-                vals = val1.T[::wavelength_plot_every][index]
-                plt.plot(self.measurement_num_at_value(value), vals / vals[-1], 'o-',
-                         color=cmap(index / (np.sum(wav_abs_mask.astype(int))//wavelength_plot_every)))
-            plt.xlabel('Measurement number')
-            plt.ylabel('Relative absorbance')
-            plt.xticks(self.measurement_num_at_value(value))
+            plot_num = len(self.wavelength_masked[wav_abs_mask][::wavelength_plot_every])
+            ys = [y/y[-1] for y in (self.get_absorbances(corrected, masked, 'all', value).T[::wavelength_plot_every][index]
+                                    for index in range(plot_num))]
+            colors = [cmap(index / (plot_num // wavelength_plot_every)) for index in range(plot_num)]
+
+            plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel='Measurement number', ylabel='Relative absorbance',
+                                                xticks=self.measurement_num_at_value(value))
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=self.wavelength_masked[wav_abs_mask][0],
                                                                      vmax=self.wavelength_masked[wav_abs_mask][-1]))
-            plt.colorbar(sm, label='Wavelength (nm)', ax=plt.gca())
-            self._setting_setter(ax, **plot_kwargs)
-            plt.tight_layout()
-            if save_loc is not None:
-                plt.savefig(os.path.join(save_loc, f'absorbance vs measurement num at {value} {self.variable_name}{save_suffix}.pdf'))
-            if show:
-                plt.show()
-            else:
-                plt.close()
+            cbar_kwargs = Analyzer.set_defaults(cbar_kwargs, label='Wavelength (nm)', mappable=sm)
+            line_kwargs = Analyzer.set_defaults(line_kwargs, marker='o', linestyle='-')
 
-# plot absorbance vs variable
+            if save_loc is not None:
+                save_loc = os.path.join(save_loc, f'absorbance vs measurement num at {value} {self.variable_name}{save_suffix}.pdf')
+            self._1d_lines(self.measurement_num_at_value(value), ys, plot_kwargs=plot_kwargs, save_loc=save_loc, show=show,
+                           colors=colors, cbar_kwargs=cbar_kwargs, line_kwargs=line_kwargs, save_kwargs=save_kwargs, **kwargs)
+
+    # plot absorbance vs variable
     def absorbance_vs_wavelength_with_variable(self, *, corrected=True, masked=True, save_loc=None, num='plot',
-                                               save_suffix='', plot_kwargs={}, legend_kwargs={}):
-        fig, ax = plt.subplots()
-        for index, var in enumerate(np.unique(self.variable)):
-            plt.plot(self.wavelength_masked, self.get_absorbances(corrected, masked, num, var).T, f'C{index}',
-                     label=self.variable_factor * var)
-        plt.xlabel('Wavelength (nm)')
-        plt.ylabel('Absorbance')
-        plt.legend(title=self.variable_display_name, **legend_kwargs)
-        self._setting_setter(ax, **plot_kwargs)
-        plt.tight_layout()
+                                               save_suffix='', plot_kwargs=None, legend_kwargs=None, show=False,
+                                               line_kwargs: dict = None, save_kwargs: dict = None, **kwargs):
+        ys = [self.get_absorbances(corrected, masked, num, var).T for var in np.unique(self.variable)]
+        labels = [self.variable_factor * var for var in np.unique(self.variable)]
+        plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel='Wavelength (nm)', ylabel='Absorbance')
+        legend_kwargs = Analyzer.set_defaults(legend_kwargs, title=self.variable_display_name)
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'absorbance vs wavelength with variable{save_suffix}.pdf'))
+            save_loc = os.path.join(save_loc, f'absorbance vs wavelength with variable{save_suffix}.pdf')
+        self._1d_lines(self.get_wavelength(masked), ys, plot_kwargs=plot_kwargs, legend_kwargs=legend_kwargs,
+                       save_loc=save_loc, show=show, labels=labels, line_kwargs=line_kwargs, save_kwargs=save_kwargs,
+                       **kwargs)
 
     def absorbance_vs_variable_with_wavelength(self, *, corrected=True, masked=True, save_loc=None, num='plot',
-                                               wavelength_plot_every=5, save_suffix='', plot_kwargs={}):
+                                               wavelength_plot_every=5, save_suffix='', plot_kwargs=None,
+                                               cbar_kwargs=None, show=False, **kwargs):
         cmap = plt.get_cmap(self.cmap)
-        fig, ax = plt.subplots()
-        for index, wav in enumerate(self.wavelength_masked[::wavelength_plot_every]):
-            plt.plot(self.variable_factor * self.variable_num,
-                     self.get_absorbances(corrected, masked, num, None).T[::wavelength_plot_every][index],
-                     color=cmap(index / len(self.wavelength_masked[::wavelength_plot_every])))
-        plt.xlabel(self.variable_name)
-        plt.ylabel('Absorbance')
-        plt.xticks(self.variable_factor * self.variable_num)
-        # make a cmap for the plot
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=self.wavelength_masked[0], vmax=self.wavelength_masked[-1]))
-        plt.colorbar(sm, label='Wavelength (nm)', ax=ax)
-        self._setting_setter(ax, **plot_kwargs)
-        plt.tight_layout()
+        xs = self.variable_factor * self.variable_num
+        y_len = len(self.wavelength_masked[::wavelength_plot_every])
+        ys = [self.get_absorbances(corrected, masked, num, None).T[::wavelength_plot_every][index]
+              for index in range(y_len)]
+        colors = [cmap(index/(y_len-1)) for index in range(y_len)]
+        plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel=self.variable_name, ylabel='Absorbance',
+                                            xticks=self.variable_factor * self.variable_num)
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=self.get_wavelength(masked)[0],
+                                                                 vmax=self.get_wavelength(masked)[-1]))
+        cbar_kwargs = Analyzer.set_defaults(cbar_kwargs, label='Wavelength (nm)', mappable=sm)
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'absorbance vs {self.variable_name} with wavelength{save_suffix}.pdf'))
+            save_loc = os.path.join(save_loc, f'absorbance vs {self.variable_name} with wavelength{save_suffix}.pdf')
+        self._1d_lines(xs, ys, plot_kwargs=plot_kwargs, save_loc=save_loc, show=show,
+                       colors=colors, cbar_kwargs=cbar_kwargs, **kwargs)
 
     def relative_absorbance_vs_variable_with_wavelength(self, *, corrected=True, masked=True, num='plot', save_loc=None,
-                                                        wavelength_plot_every=5, min_absorbance=0.02, save_suffix='', plot_kwargs={}):
+                                                        wavelength_plot_every=5, min_absorbance=0.02, save_suffix='',
+                                                        plot_kwargs=None, cbar_kwargs=None, show=False, **kwargs):
         cmap = plt.get_cmap(self.cmap)
-        fig, ax = plt.subplots()
+        xs = self.variable_factor * self.variable_num
         wav_abs_mask = self.get_absorbances(corrected, masked, num, None)[-1, :] > min_absorbance
+        y_len = len(self.wavelength_masked[wav_abs_mask][::wavelength_plot_every])
+        ys = [y / y[-1] for y in (self.get_absorbances(corrected, masked, num, None).T[::wavelength_plot_every][index]
+                                  for index in range(y_len))]
 
-        for index, wav in enumerate(self.wavelength_masked[wav_abs_mask][::wavelength_plot_every]):
-            vals = self.get_absorbances(corrected, masked, num, None)[::wavelength_plot_every][index]
-            plt.plot(self.variable_factor * self.variable_num, vals / vals[-1],
-                     color=cmap(index / len(self.wavelength_masked[::wavelength_plot_every])))
-        plt.xlabel(self.variable_name)
-        plt.ylabel('Absorbance')
-        plt.xticks(self.variable_factor * self.variable_num)
-        # make a cmap for the plot
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=self.wavelength_masked[0], vmax=self.wavelength_masked[-1]))
-        plt.colorbar(sm, label='Wavelength (nm)', ax=ax)
-        self._setting_setter(ax, **plot_kwargs)
-        plt.tight_layout()
+        colors = [cmap(index / (y_len - 1)) for index in range(y_len)]
+        plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel=self.variable_name, ylabel='Absorbance',
+                                            xticks=self.variable_factor * self.variable_num)
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=self.get_wavelength(masked)[0],
+                                                                 vmax=self.get_wavelength(masked)[-1]))
+        cbar_kwargs = Analyzer.set_defaults(cbar_kwargs, label='Wavelength (nm)', mappable=sm)
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'relative absorbance vs {self.variable_name} with wavelength{save_suffix}.pdf'))
+            save_loc = os.path.join(save_loc, f'relative absorbance vs {self.variable_name} with wavelength{save_suffix}.pdf')
+        self._1d_lines(xs, ys, plot_kwargs=plot_kwargs, save_loc=save_loc, show=show,
+                       colors=colors, cbar_kwargs=cbar_kwargs, **kwargs)
 
 # pearson r for each wavelength
     def pearson_r_vs_wavelength_with_methods(self, *, save_loc=None, r2_values=None, masked=True, num='plot',
-                                             save_suffix='', plot_kwargs={}, legend_kwargs={}):
+                                             save_suffix='', plot_kwargs=None, legend_kwargs=None, **kwargs):
         if r2_values is None:
             r2_values = [0, 1.025]
         if num == 'all' or num == 'best':
@@ -196,34 +230,26 @@ class Analyzer(DataSet):
         for lin in lins:
             r2_mask = r2_mask | ((r2_values[0] < lin ** 2) & (lin ** 2 < r2_values[1]))
 
-        # r2_mask = (((r2_values[0] < linearity_uncorrected ** 2) & (linearity_uncorrected ** 2 < r2_values[1]))
-        #          | ((r2_values[0] < linearity_uncorrected_num ** 2) & (linearity_uncorrected_num ** 2 < r2_values[1]))
-        #          | ((r2_values[0] < linearity_best_num ** 2) & (linearity_best_num ** 2 < r2_values[1]))
-        #          | ((r2_values[0] < linearity ** 2) & (linearity ** 2 < r2_values[1]))
-        #          | ((r2_values[0] < linearity_corrected_num ** 2) & (linearity_corrected_num ** 2 < r2_values[1])))
-
         wavs = self.wavelength_masked[r2_mask]
         dw = np.diff(wavs)
         index = np.nonzero(dw > 10)[0]
         if len(index) > 0:
             r2_mask[index[0] + 1:] = False
 
-        fig, ax = plt.subplots()
-        plt.plot(self.wavelength_masked[r2_mask], linearity[r2_mask] ** 2, label='corrected')
-        plt.plot(self.wavelength_masked[r2_mask], linearity_corrected_num[r2_mask] ** 2, label='corrected num')
-        plt.plot(self.wavelength_masked[r2_mask], linearity_best_num[r2_mask] ** 2, label='corrected best num')
-        plt.plot(self.wavelength_masked[r2_mask], linearity_uncorrected[r2_mask] ** 2, label='uncorrected')
-        plt.plot(self.wavelength_masked[r2_mask], linearity_uncorrected_num[r2_mask] ** 2, label='uncorrected num')
-        plt.plot(self.wavelength_masked[r2_mask], linearity_uncorrected_best_num[r2_mask] ** 2, label='uncorrected best num')
-        plt.xlabel('Wavelength (nm)')
-        plt.ylabel('Linearity coefficient')
-        plt.grid()
-        plt.legend(**legend_kwargs)
-        plt.ylim(*r2_values)
-        self._setting_setter(ax, **plot_kwargs)
-        plt.tight_layout()
+        xs = [self.wavelength_masked[r2_mask]] * len(lins)
+        ys = [linearity[r2_mask] ** 2, linearity_corrected_num[r2_mask] ** 2, linearity_best_num[r2_mask] ** 2,
+              linearity_uncorrected[r2_mask] ** 2, linearity_uncorrected_num[r2_mask] ** 2,
+              linearity_uncorrected_best_num[r2_mask] ** 2]
+        labels = ['corrected', 'corrected num', 'corrected best num', 'uncorrected', 'uncorrected num',
+                  'uncorrected best num']
+        plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel='Wavelength (nm)', ylabel='Linearity coefficient',
+                                            ylim=r2_values)
+        legend_kwargs = Analyzer.set_defaults(legend_kwargs, title='Method')
         if save_loc is not None:
-            plt.savefig(os.path.join(save_loc, f'pearson r^2 vs wavelength method comparison{save_suffix}.pdf'))
+            save_loc = os.path.join(save_loc, f'pearson r^2 vs wavelength method comparison{save_suffix}.pdf')
+
+        self._1d_lines(xs, ys, plot_kwargs=plot_kwargs, legend_kwargs=legend_kwargs, labels=labels, save_loc=save_loc,
+                       **kwargs)
 
     def linear_fit_vs_wavelength_with_methods(self, *, save_loc=None, masked=True, num='plot', show=True,
                                               save_suffix='', plot_kwargs={}, legend_kwargs={}):
