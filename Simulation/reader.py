@@ -6,7 +6,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
-class Comsol1DAnalyzer:
+from General.Plotting.Plot import Plot
+
+
+class Comsol1DAnalyzer(Plot):
     def __init__(self, loc, *, delimiter=';', comments='%'):
         with open(loc, 'r') as f:
             lines = []
@@ -186,30 +189,6 @@ class Comsol1DAnalyzer:
                 return key, self.data[key][::order]
 
         raise ValueError(f'No data found with name {name}')
-
-    @staticmethod
-    def _setting_setter(ax, *, xlabel='', ylabel='', title='', grid=True, xlim=None, ylim=None, xticks=None,
-                        yticks=None, xscale=None, yscale=None):
-        if xlabel:
-            ax.set_xlabel(xlabel)
-        if ylabel:
-            ax.set_ylabel(ylabel)
-        if title:
-            ax.set_title(title)
-        if grid:
-            ax.grid(grid)
-        if xlim:
-            ax.set_xlim(xlim)
-        if ylim:
-            ax.set_ylim(ylim)
-        if xticks:
-            ax.set_xticks(xticks)
-        if yticks:
-            ax.set_yticks(yticks)
-        if xscale:
-            ax.set_xscale(xscale)
-        if yscale:
-            ax.set_yscale(yscale)
 
 
 if __name__ == '__main__':
