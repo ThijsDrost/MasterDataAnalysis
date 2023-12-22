@@ -49,7 +49,8 @@ class Comsol1DAnalyzer(Plot):
             if not self.data[key].shape == (len(self._times), self._nodes):
                 raise ValueError('Data has wrong shape')
 
-    def _set_distance(self, dist_meter):
+    @staticmethod
+    def _set_distance(dist_meter):
         order_of_mag = math.floor(math.log10(max(dist_meter)))
         if order_of_mag >= 0:
             name, val = 'm', 1

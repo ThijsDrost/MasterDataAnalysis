@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import scipy
 import lmfit
 
-from Data_handling.Import import DataSet
+from General.Data_handling.Import import DataSet
 from General.Plotting.Plot import Plot
 
 
