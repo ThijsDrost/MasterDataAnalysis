@@ -102,11 +102,9 @@ class DataSet(SimpleDataSet):
                  selected_num, baseline_correction=None):
         super().__init__(wavelength, absorbances, variable, measurement_num, variable_name)
         self.wavelength_range = wavelength_range
-        # self.baseline_correction = baseline_correction
         self._selected_num = selected_num
         if wavelength_range is not None:
             self._mask = (wavelength_range[0] < wavelength) & (wavelength < wavelength_range[1])
-        # if baseline_correction is not None:
 
         self.baseline_correction = baseline_correction if baseline_correction is not None else [wavelength[0], wavelength[-1]]
         correction_mask = (self.baseline_correction[0] < wavelength) & (wavelength < self.baseline_correction[1])
@@ -114,11 +112,7 @@ class DataSet(SimpleDataSet):
 
         self._absorbance_best_num = np.zeros((len(np.unique(variable)), len(self.wavelength)))
         self._variable_best_num = np.zeros(len(np.unique(variable)))
-        # self._baseline_correction_best_num = np.zeros(len(np.unique(variable)))
         for i, v in enumerate(np.unique(variable)):
-            # v_absorbances = absorbances[:, self._mask][variable == v]
-            # v_absorbances = self.absorbances_masked_corrected[variable == v]
-            # v_absorbances = self.get_absorbances(True, True, None, v)
             nums = self.measurement_num_at_value(v)
             value = []
             pair_values = []
@@ -132,7 +126,6 @@ class DataSet(SimpleDataSet):
                     mask = intensities > 0.1 * np.max(intensities)
                     value.append(np.sum((self.get_absorbances(False, True, pair[0], v)[mask]
                                          - self.get_absorbances(False, True, pair[1], v)[mask]) ** 2))
-                    # value.append(np.sum((v_absorbances[pair[0]][mask] - v_absorbances[pair[1]][mask]) ** 2))
                     pair_values.append(pair)
 
                 min_num = pair_values[np.argmin(value)]

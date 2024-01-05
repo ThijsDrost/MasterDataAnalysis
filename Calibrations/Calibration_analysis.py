@@ -149,14 +149,16 @@ class Analyzer(DataSet):
                        save_loc=save_loc, show=show, labels=labels, line_kwargs=line_kwargs, save_kwargs=save_kwargs,
                        **kwargs)
 
-    def absorbance_vs_variable_with_wavelength(self, *, corrected=True, masked=True, save_loc=None, num='plot',
+    def absorbance_vs_variable_with_wavelength(self, norm=False, *, corrected=True, masked=True, save_loc=None, num='plot',
                                                wavelength_plot_every=5, save_suffix='', plot_kwargs=None,
-                                               cbar_kwargs=None, show=False, **kwargs):
+                                               cbar_kwargs=None, show=False, min_absorbance=0.02, **kwargs):
         cmap = plt.get_cmap(self.cmap)
         xs = self.variable_factor * self.variable_num
         y_len = len(self.wavelength_masked[::wavelength_plot_every])
         ys = [self.get_absorbances(corrected, masked, num, None).T[::wavelength_plot_every][index]
               for index in range(y_len)]
+        if norm:
+            ys = [y / y[-1] for y in ys if y[-1] > min_absorbance]
         colors = [cmap(index/(y_len-1)) for index in range(y_len)]
         plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel=self.variable_name, ylabel='Absorbance',
                                             xticks=self.variable_factor * self.variable_num)
@@ -188,6 +190,38 @@ class Analyzer(DataSet):
             save_loc = os.path.join(save_loc, f'relative absorbance vs {self.variable_name} with wavelength{save_suffix}.pdf')
         self._1d_lines(xs, ys, plot_kwargs=plot_kwargs, save_loc=save_loc, show=show,
                        colors=colors, cbar_kwargs=cbar_kwargs, **kwargs)
+
+    def absorbance_vs_variable_with_bunched_wavelength(self, bound_width, norm=False, *, corrected=True, masked=True, num='plot', save_loc=None,
+                                                                save_suffix='', plot_kwargs={}, min_absorbance=0.02):
+        cmap = plt.get_cmap(self.cmap)
+        fig, ax = plt.subplots()
+        vals = self.get_absorbances(corrected, masked, num, None)
+        a_mask = np.max(vals, axis=0) > min_absorbance
+        wav_m, vals_m = self.wavelength_masked[a_mask], vals[:, a_mask]
+        data_len = len(wav_m)
+        sorter = np.argsort(self.variable_num)
+        for ndx in range(0, data_len, bound_width):
+            i_min, i_max = ndx, min(ndx + bound_width, data_len)
+            if i_max - i_min < 2:
+                continue
+            vals_selected = np.sum(vals_m[:, i_min: i_max], axis=1)
+            if np.max(vals_selected) < min_absorbance:
+                continue
+            if norm:
+                vals_selected = vals_selected[sorter] / vals_selected[sorter][-1]
+            else:
+                vals_selected = vals_selected[sorter]
+            plt.plot(self.variable_factor * self.variable_num[sorter], vals_selected, '.', color=cmap(ndx / data_len))
+        plt.xlabel(self.variable_name)
+        plt.ylabel('Absorbance')
+        plt.xticks(self.variable_factor * self.variable_num)
+        # make a cmap for the plot
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=wav_m[0], vmax=wav_m[-1]))
+        plt.colorbar(sm, label='Wavelength (nm)', ax=ax)
+        self._setting_setter(ax, **plot_kwargs)
+        plt.tight_layout()
+        if save_loc is not None:
+            plt.savefig(os.path.join(save_loc, f'relative absorbance vs {self.variable_name} with wavelength{save_suffix}.pdf'))
 
 # pearson r for each wavelength
     def pearson_r_vs_wavelength_with_methods(self, *, save_loc=None, r2_values=None, masked=True, num='plot',
@@ -352,7 +386,6 @@ class Analyzer(DataSet):
             plt.show()
         else:
             plt.close()
-
 
     def relative_intensity_fit_vs_variable(self, *, corrected=True, masked=True, save_loc=None, num='plot', show=True,
                                            reference_line, save_suffix='', plot_kwargs={}, legend_kwargs={}):
