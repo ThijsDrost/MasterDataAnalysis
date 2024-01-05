@@ -369,15 +369,15 @@ class Analyzer(DataSet, Plot):
                                                 kws={'concentration': self.variable_best_num[:, np.newaxis]})
 
         print(
-        f"""
-        # Fit report
-        corrected: {result.params['a'].value:.3f} ± {result.params['a'].stderr:.3f}
-        corrected num: {result_num.params['a'].value:.3f} ± {result_num.params['a'].stderr:.3f}
-        corrected best num: {result_best_num.params['a'].value:.3f} ± {result_best_num.params['a'].stderr:.3f}
-        uncorrected: {result_uncorr.params['a'].value:.3f} ± {result_uncorr.params['a'].stderr:.3f}
-        uncorrected num: {result_uncorr_num.params['a'].value:.3f} ± {result_uncorr_num.params['a'].stderr:.3f}
-        uncorrected best num: {result_uncorr_best_num.params['a'].value:.3f} ± {result_uncorr_best_num.params['a'].stderr:.3f}
-        """)
+            f"""
+            # Fit report
+            corrected: {result.params['a'].value:.3f} ± {result.params['a'].stderr:.3f}
+            corrected num: {result_num.params['a'].value:.3f} ± {result_num.params['a'].stderr:.3f}
+            corrected best num: {result_best_num.params['a'].value:.3f} ± {result_best_num.params['a'].stderr:.3f}
+            uncorrected: {result_uncorr.params['a'].value:.3f} ± {result_uncorr.params['a'].stderr:.3f}
+            uncorrected num: {result_uncorr_num.params['a'].value:.3f} ± {result_uncorr_num.params['a'].stderr:.3f}
+            uncorrected best num: {result_uncorr_best_num.params['a'].value:.3f} ± {result_uncorr_best_num.params['a'].stderr:.3f}
+            """)
 
 # plt.figure()
 # plt.plot(self.wavelength_masked, (self.absorbances_masked_num / (result.params['a'].value * self.variable_num[:, np.newaxis])).T)
