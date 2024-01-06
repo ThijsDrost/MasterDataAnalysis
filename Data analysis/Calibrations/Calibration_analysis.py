@@ -30,6 +30,10 @@ class Analyzer(DataSet, Plot):
     def absorbance_vs_wavelength_with_num(self, *, corrected=True, masked=True, save_loc=None, show=False,
                                           save_suffix='', plot_kwargs=None, legend_kwargs=None, line_kwargs=None,
                                           save_kwargs=None, **kwargs):
+        """
+        Plot absorbance vs wavelength for each measurement number
+        """
+
         for value in np.unique(self.variable):
             ys = [self.get_absorbances(corrected, masked, var, value).T for var in self.measurement_num_at_value(value)]
             labels = list(range(len(ys)))
@@ -44,6 +48,9 @@ class Analyzer(DataSet, Plot):
                                                       wavelength_plot_every=5, min_absorbance=0.02, show=False,
                                                       save_suffix='', plot_kwargs=None, cbar_kwargs=None, line_kwargs=None,
                                                       save_kwargs=None, **kwargs):
+        """
+        Plot absorbance vs measurement number for each wavelength
+        """
         cmap = plt.get_cmap(self.cmap)
         for value in np.unique(self.variable):
             wav_abs_mask = self.get_absorbances(corrected, masked, num, value)[-1, :] > min_absorbance
@@ -68,6 +75,9 @@ class Analyzer(DataSet, Plot):
     def absorbance_vs_wavelength_with_variable(self, *, corrected=True, masked=True, save_loc=None, num='plot',
                                                save_suffix='', plot_kwargs=None, legend_kwargs=None, show=False,
                                                line_kwargs: dict = None, save_kwargs: dict = None, **kwargs):
+        """
+        Plot absorbance vs wavelength for each variable
+        """
         ys = [self.get_absorbances(corrected, masked, num, var).T for var in np.unique(self.variable)]
         labels = [self.variable_factor * var for var in np.unique(self.variable)]
         plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel='Wavelength (nm)', ylabel='Absorbance')
@@ -118,7 +128,6 @@ class Analyzer(DataSet, Plot):
         self._1d_lines(xs, ys, plot_kwargs=plot_kwargs, save_loc=save_loc, show=show,
                        colors=colors, cbar_kwargs=cbar_kwargs, **kwargs)
 
-# pearson r for each wavelength
     def pearson_r_vs_wavelength_with_methods(self, *, save_loc=None, r2_values=None, masked=True, num='plot',
                                              save_suffix='', plot_kwargs=None, legend_kwargs=None, **kwargs):
         if r2_values is None:
@@ -323,6 +332,9 @@ class Analyzer(DataSet, Plot):
                                            corrected=True, masked=True, save_loc=None, num='plot', show=True,
                                            save_suffix='', plot_kwargs=None, line_kwargs=None, xtick_formatter='.1f',
                                            **kwargs):
+        """
+        Plot the ratio of the average absorbance in ranges1 to the average absorbance in ranges2 vs the variable
+        """
         xs = self.variable_factor * self.variable_num
         mask1 = np.full(self.wavelength_masked.shape, False)
         for range in ranges1:
@@ -342,15 +354,10 @@ class Analyzer(DataSet, Plot):
             save_loc = os.path.join(save_loc, f'absorbance vs {self.variable_name} with in ranges{save_suffix}.pdf')
         self._1d_lines(xs, ys, plot_kwargs=plot_kwargs, save_loc=save_loc, show=show, line_kwargs=line_kwargs, **kwargs)
 
-    # def wavelength_ranges_ratio_vs_variable(self, ranges, *, corrected=True, masked=True, save_loc=None, num='plot',
-    #                                         show=True, save_suffix='', plot_kwargs=None, legend_kwargs=None, **kwargs):
-
-
     def full_spectrum_fit_with_methods(self):
         def residual(pars, x, concentration):
             a = pars['a'].value
             return x - a * concentration * x[-1]
-
 
         params = lmfit.Parameters()
         params.add('a', value=1, vary=True)
@@ -378,7 +385,3 @@ class Analyzer(DataSet, Plot):
             uncorrected num: {result_uncorr_num.params['a'].value:.3f} ± {result_uncorr_num.params['a'].stderr:.3f}
             uncorrected best num: {result_uncorr_best_num.params['a'].value:.3f} ± {result_uncorr_best_num.params['a'].stderr:.3f}
             """)
-
-# plt.figure()
-# plt.plot(self.wavelength_masked, (self.absorbances_masked_num / (result.params['a'].value * self.variable_num[:, np.newaxis])).T)
-# plt.close()
