@@ -70,6 +70,12 @@ class SimpleDataSet:
         self.variable = variable
         self.measurement_num = measurement_num
         self.variable_name = variable_name
+
+        sort_mask = np.argsort(self.variable)
+        self.absorbances = self.absorbances[sort_mask]
+        self.variable = self.variable[sort_mask]
+        self.measurement_num = self.measurement_num[sort_mask]
+
         if not len(self.wavelength) == self.absorbances.shape[1]:
             raise ValueError("Wavelength and absorbances don't match")
         if not len(self.variable) == self.absorbances.shape[0]:
