@@ -365,6 +365,30 @@ class Analyzer(DataSet, Plot):
         else:
             plt.close()
 
+    def absorbances_wavelength_ranges_vs_variable(self, ranges: list[tuple[int, int]], *, corrected=True, masked=True,
+                                                  save_loc=None, num='plot', show=True, save_suffix='',
+                                                  plot_kwargs=None, legend_kwargs=None, line_kwargs=None,
+                                                  xtick_formatter='.1f', wav_range_formatter='.0f', **kwargs):
+        """
+        Plot average intensity in each wavelength range vs variable
+        """
+        xs = self.variable_factor * self.variable_num
+        ys = []
+        labels = []
+        for wav_range in ranges:
+            mask = ((wav_range[0] < self.get_wavelength(masked)) & (self.get_wavelength(masked) < wav_range[1]))
+            labels.append(f'{wav_range[0]:^{wav_range_formatter}}-{wav_range[1]:^{wav_range_formatter}} nm')
+            ys.append(np.average(self.get_absorbances(corrected, masked, num, None).T[mask], axis=0))
+        plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel=self.variable_display_name, ylabel='Absorbance',
+                                            xticks=self.variable_factor * self.variable_num,
+                                            xticklabels=[f'{x:^{xtick_formatter}}' for x in self.variable_factor * self.variable_num])
+        legend_kwargs = Analyzer.set_defaults(legend_kwargs, title='Wavelength range')
+        line_kwargs = Analyzer.set_defaults(line_kwargs, marker='o', linestyle='-')
+        if save_loc is not None:
+            save_loc = os.path.join(save_loc, f'Average absorbance in ranges vs {self.variable_name} with{save_suffix}.pdf')
+        self._1d_lines(xs, ys, labels=labels, plot_kwargs=plot_kwargs, legend_kwargs=legend_kwargs, save_loc=save_loc,
+                       show=show, line_kwargs=line_kwargs, **kwargs)
+
     def wavelength_range_ratio_vs_variable(self, ranges1: list[tuple[int, int]], ranges2: list[tuple[int, int]], *,
                                            corrected=True, masked=True, save_loc=None, num='plot', show=True,
                                            save_suffix='', plot_kwargs=None, line_kwargs=None, xtick_formatter='.1f',
