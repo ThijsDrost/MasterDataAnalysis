@@ -55,7 +55,7 @@ class Analyzer(DataSet, Plot):
 
     @staticmethod
     def _default_factor(display_name):
-        matcher = f"u({'|'.join((f'({v})' for v in Analyzer._match_units))})"
+        matcher = f"({'|'.join((f'({v})' for v in Analyzer._match_units))})"
         for key, value in {'m': 1000, 'u': 1_000_000, 'n': 1_000_000_000}.items():
             if re.search(key+matcher, display_name):
                 return value
