@@ -1,7 +1,6 @@
 import os
 import itertools
 import warnings
-from typing import Union
 
 import numpy as np
 import h5py
@@ -148,7 +147,33 @@ class DataSet(SimpleDataSet):
                        simple_data_set.measurement_num, simple_data_set.variable_name, wavelength_range, selected_num,
                        baseline_correction)
 
-    def get_absorbances(self, corrected=True, masked=True, num: Union[str, int, None] = 'all', var_value=None):
+    @staticmethod
+    def standard(loc, species, *, wavelength_range=None, selected_num=1, baseline_correction=None):
+        """
+        Make a dataset with standard parameters.
+
+        Parameters
+        ----------
+        loc: str | os.PathLike
+        species: str
+        wavelength_range: list[float]
+            default=[180, 450]
+        selected_num: int, default=1
+        baseline_correction: list[float]
+            default=[450, 500]
+
+        Returns
+        -------
+        DataSet
+        """
+        if baseline_correction is None:
+            baseline_correction = [450, 500]
+        if wavelength_range is None:
+            wavelength_range = [180, 450]
+        simple = import_hdf5(loc, species)
+        return DataSet.from_simple(simple, wavelength_range, selected_num, baseline_correction)
+
+    def get_absorbances(self, corrected=True, masked=True, num: str | int | None = 'all', var_value=None):
         absorbances = self.absorbances
         if corrected:
             absorbances = self.absorbances - self._baseline_correction
