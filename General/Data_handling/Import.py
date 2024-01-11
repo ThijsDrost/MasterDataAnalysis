@@ -103,6 +103,12 @@ class SimpleDataSet:
 
 
 class DataSet(SimpleDataSet):
+    _default_values = {
+        'wavelength_range': (180, 450),
+        'selected_num': 1,
+        'baseline_correction': (180, 450)
+    }
+
     def __init__(self, wavelength, absorbances, variable, measurement_num, variable_name, wavelength_range,
                  selected_num, baseline_correction=None):
         super().__init__(wavelength, absorbances, variable, measurement_num, variable_name)
@@ -142,7 +148,8 @@ class DataSet(SimpleDataSet):
         self._baseline_correction_best_num = np.mean(self._absorbance_best_num[:, correction_mask], axis=1)[:, np.newaxis]
 
     @staticmethod
-    def from_simple(simple_data_set, wavelength_range, selected_num, baseline_correction):
+    def from_simple(simple_data_set, wavelength_range=_default_values['wavelength_range'],
+                    selected_num=_default_values['selected_num'], baseline_correction=_default_values['baseline_correction']):
         return DataSet(simple_data_set.wavelength, simple_data_set.absorbances, simple_data_set.variable,
                        simple_data_set.measurement_num, simple_data_set.variable_name, wavelength_range, selected_num,
                        baseline_correction)
@@ -167,9 +174,9 @@ class DataSet(SimpleDataSet):
         DataSet
         """
         if baseline_correction is None:
-            baseline_correction = [450, 500]
+            baseline_correction = DataSet._default_values['baseline_correction']
         if wavelength_range is None:
-            wavelength_range = [180, 450]
+            wavelength_range = DataSet._default_values['wavelength_range']
         simple = import_hdf5(loc, species)
         return DataSet.from_simple(simple, wavelength_range, selected_num, baseline_correction)
 
