@@ -68,6 +68,22 @@ class Plot:
 
     @staticmethod
     def set_defaults(kwargs_dict: dict | None, **kwargs) -> dict:
+        """
+        Set values for a dict. If the dict already has a value for a key, the value is not changed.
+
+        Parameters
+        ----------
+        kwargs_dict: dict | None
+            If None, a new dict is created. The dict is updated with the kwargs, with the values in the dict taking
+            precedence over the kwargs.
+        kwargs:
+            The kwargs to add to the dict
+
+        Returns
+        -------
+        dict
+            The dict with the values from the kwargs added to it
+        """
         kwargs_dict = kwargs_dict or {}
         kwargs.update(kwargs_dict)
         return kwargs
