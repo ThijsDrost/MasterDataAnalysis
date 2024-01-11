@@ -354,8 +354,6 @@ class InterpolationDataSet(SimpleDataSet):
     def interpolate(self, variable_value):
         if variable_value < np.min(self.variable) or variable_value > np.max(self.variable):
             raise ValueError('Variable value out of range')
-        if variable_value in self.variable:
-            return self[self.variable == variable_value]
         else:
             return self._interpolate(variable_value)
 
