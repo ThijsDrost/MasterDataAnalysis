@@ -127,7 +127,14 @@ class DataSet(SimpleDataSet):
             nums = self.measurement_num_at_value(v)
             value = []
             pair_values = []
-            if len(nums) == 1:
+            if len(np.unique(nums)) == 1:
+                # TODO: this is a lazy fix, should be done properly, maybe raise a warning that best_num cannot be
+                #  determined, or just remove the option to use best_num, cause it is not very useful. This is used when
+                #  a dataset is made from a simple dataset
+                num = self.measurement_num_at_value(v)[0]
+                self._absorbance_best_num[i] = self.get_absorbances(corrected=False, masked=False, num=num, var_value=v)[0]
+                self._variable_best_num[i] = v
+            elif len(nums) == 1:
                 num = self.measurement_num_at_value(v)[0]
                 self._absorbance_best_num[i] = self.get_absorbances(True, False, num, v)
                 self._variable_best_num[i] = v
