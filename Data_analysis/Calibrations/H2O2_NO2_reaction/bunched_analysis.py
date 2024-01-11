@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import lmfit
 
-from General.Data_handling.Import import import_hdf5, drive_letter
+from General.Data_handling import import_hdf5, drive_letter
 
 index = 5
 

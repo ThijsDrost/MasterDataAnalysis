@@ -1,4 +1,4 @@
-from General.Data_handling import Analyzer
+from General.Analysis import Analyzer
 from General.Data_handling import drive_letter
 
 
