@@ -320,7 +320,7 @@ class DataSet(SimpleDataSet):
             raise TypeError(f"Can't add {type(other)} to DataSet")
 
 
-class InterpolationSet(SimpleDataSet):
+class InterpolationDataSet(SimpleDataSet):
     def __init__(self, wavelength, absorbances, variable, variable_name, add_zero=True):
         if add_zero:
             absorbances = np.concatenate((np.zeros((1, absorbances.shape[1])), absorbances))
