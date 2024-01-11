@@ -332,9 +332,14 @@ class InterpolationDataSet(SimpleDataSet):
         self._interpolator = scipy.interpolate.interp1d(variable, absorbances, axis=0, kind='linear')
 
     @staticmethod
-    def from_simple(simple_data_set, add_zero=True):
-        return InterpolationSet(simple_data_set.wavelength, simple_data_set.absorbances, simple_data_set.variable,
-                                simple_data_set.variable_name, add_zero)
+    def from_simple(simple_data_set: SimpleDataSet, add_zero=True):
+        return InterpolationDataSet(simple_data_set.wavelength, simple_data_set.absorbances, simple_data_set.variable,
+                                    simple_data_set.variable_name, add_zero)
+
+    @staticmethod
+    def from_dataset(data_set: DataSet, add_zero=True, corrected=True, num=None):
+        return InterpolationDataSet(data_set.wavelength, data_set.get_absorbances(corrected=corrected, masked=False, num=num),
+                                    data_set.variable_at_num(num), data_set.variable_name, add_zero)
 
     def closest(self, variable_value):
         if variable_value in self.variable:
