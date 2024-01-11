@@ -14,6 +14,9 @@ fonttools=4.25.0=pyhd3eb1b0_0
 freetype=2.12.1=ha860e81_0
 future=0.18.3=py312haa95532_0
 giflib=5.2.1=h8cc25b3_3
+h5py=3.9.0=py312h59a1360_0
+hdf5=1.12.1=h51c971a_3
+icc_rt=2022.1.0=h6049295_2
 icu=73.1=h6c2663c_0
 intel-openmp=2023.1.0=h59b6b97_46320
 jpeg=9e=h2bbff1b_1
