@@ -8,7 +8,7 @@ import h5py
 from General.Data_handling.Data_import import SpectroData
 from SpectrometerGUI.Spectrometer.Widgets.SpectraPlot import SpectraPlot
 from SpectrometerGUI.Spectrometer.Widgets.AbsorptionFitPlot import AbsorptionFitPlot
-from General.Analysis.Interpolation_model import multi_species_model
+from General.Analysis.Models import multi_species_model
 
 
 class MeasureGUI:
