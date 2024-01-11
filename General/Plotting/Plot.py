@@ -30,8 +30,7 @@ class Plot:
 
     @staticmethod
     def _1d_lines(xs, ys, *, colors=None, labels=None, legend_kwargs: dict = None, save_loc: str = None,
-                  show: bool = False,
-                  plot_kwargs: dict = None, cbar_kwargs: dict = None, line_kwargs: dict = None,
+                  show: bool = False, plot_kwargs: dict = None, cbar_kwargs: dict = None, line_kwargs: dict = None,
                   save_kwargs: dict = None):
         if colors is None:
             colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
