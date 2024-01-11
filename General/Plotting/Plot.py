@@ -69,7 +69,5 @@ class Plot:
     @staticmethod
     def set_defaults(kwargs_dict: dict | None, **kwargs) -> dict:
         kwargs_dict = kwargs_dict or {}
-        for key, value in kwargs.items():
-            if key not in kwargs_dict.keys():
-                kwargs_dict[key] = value
-        return kwargs_dict
+        kwargs.update(kwargs_dict)
+        return kwargs
