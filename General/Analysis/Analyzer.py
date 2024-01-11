@@ -61,9 +61,6 @@ class Analyzer(DataSet, Plot):
                 return value
         return 1
 
-    def get_wavelength(self, masked=True):
-        return self.wavelength_masked if masked else self.wavelength
-
     def absorbance_vs_wavelength_with_num(self, *, corrected=True, masked=True, save_loc=None, show=False,
                                           save_suffix='', plot_kwargs=None, legend_kwargs=None, line_kwargs=None,
                                           save_kwargs=None, **kwargs):
@@ -72,10 +69,10 @@ class Analyzer(DataSet, Plot):
         """
 
         for value in np.unique(self.variable):
-            ys = [self.get_absorbances(corrected, masked, var, value).T for var in self.measurement_num_at_value(value)]
+            ys = [self.get_absorbances(corrected=corrected, masked=masked, num=var, var_value=value).T for var in self.measurement_num_at_value(value)]
             labels = list(range(len(ys)))
-            plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel='Wavelength (nm)', ylabel='Absorbance')
-            legend_kwargs = Analyzer.set_defaults(legend_kwargs, title='Measurement number')
+            plot_kwargs = Analyzer._set_defaults(plot_kwargs, xlabel='Wavelength (nm)', ylabel='Absorbance')
+            legend_kwargs = Analyzer._set_defaults(legend_kwargs, title='Measurement number')
             if save_loc is not None:
                 save_loc = os.path.join(save_loc, f'absorbance vs wavelength at {value} {self.variable_name}{save_suffix}.pdf')
             self._1d_lines(self.get_wavelength(masked), ys, plot_kwargs=plot_kwargs, legend_kwargs=legend_kwargs,
@@ -90,18 +87,18 @@ class Analyzer(DataSet, Plot):
         """
         cmap = plt.get_cmap(self.cmap)
         for value in np.unique(self.variable):
-            wav_abs_mask = self.get_absorbances(corrected, masked, num, value)[-1, :] > min_absorbance
-            plot_num = len(self.wavelength_masked[wav_abs_mask][::wavelength_plot_every])
-            ys = [y/y[-1] for y in (self.get_absorbances(corrected, masked, 'all', value).T[::wavelength_plot_every][index]
+            wav_abs_mask = self.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=value)[-1, :] > min_absorbance
+            plot_num = len(self.get_wavelength(masked)[wav_abs_mask][::wavelength_plot_every])
+            ys = [y/y[-1] for y in (self.get_absorbances(corrected=corrected, masked=masked, num='all', var_value=value).T[::wavelength_plot_every][index]
                                     for index in range(plot_num))]
             colors = [cmap(index / (plot_num // wavelength_plot_every)) for index in range(plot_num)]
 
-            plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel='Measurement number', ylabel='Relative absorbance',
-                                                xticks=self.measurement_num_at_value(value))
-            sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=self.wavelength_masked[wav_abs_mask][0],
-                                                                     vmax=self.wavelength_masked[wav_abs_mask][-1]))
-            cbar_kwargs = Analyzer.set_defaults(cbar_kwargs, label='Wavelength (nm)', mappable=sm)
-            line_kwargs = Analyzer.set_defaults(line_kwargs, marker='o', linestyle='-')
+            plot_kwargs = Analyzer._set_defaults(plot_kwargs, xlabel='Measurement number', ylabel='Relative absorbance',
+                                                 xticks=self.measurement_num_at_value(value))
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=self.get_wavelength(masked)[wav_abs_mask][0],
+                                                                     vmax=self.get_wavelength(masked)[wav_abs_mask][-1]))
+            cbar_kwargs = Analyzer._set_defaults(cbar_kwargs, label='Wavelength (nm)', mappable=sm)
+            line_kwargs = Analyzer._set_defaults(line_kwargs, marker='o', linestyle='-')
 
             if save_loc is not None:
                 save_loc = os.path.join(save_loc, f'absorbance vs measurement num at {value} {self.variable_name}{save_suffix}.pdf')
@@ -115,10 +112,10 @@ class Analyzer(DataSet, Plot):
         """
         Plot absorbance vs wavelength for each variable
         """
-        ys = [self.get_absorbances(corrected, masked, num, var).T for var in np.unique(self.variable)]
+        ys = [self.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=var).T for var in np.unique(self.variable)]
         labels = [self.variable_factor * var for var in np.unique(self.variable)]
-        plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel='Wavelength (nm)', ylabel='Absorbance')
-        legend_kwargs = Analyzer.set_defaults(legend_kwargs, title=self.variable_display_name)
+        plot_kwargs = Analyzer._set_defaults(plot_kwargs, xlabel='Wavelength (nm)', ylabel='Absorbance')
+        legend_kwargs = Analyzer._set_defaults(legend_kwargs, title=self.variable_display_name)
         if save_loc is not None:
             save_loc = os.path.join(save_loc, f'absorbance vs wavelength with variable{save_suffix}.pdf')
         self._1d_lines(self.get_wavelength(masked), ys, plot_kwargs=plot_kwargs, legend_kwargs=legend_kwargs,
@@ -130,15 +127,15 @@ class Analyzer(DataSet, Plot):
                                                cbar_kwargs=None, show=False, **kwargs):
         cmap = plt.get_cmap(self.cmap)
         xs = self.variable_factor * self.variable_num
-        y_len = len(self.wavelength_masked[::wavelength_plot_every])
-        ys = [self.get_absorbances(corrected, masked, num, None).T[::wavelength_plot_every][index]
+        y_len = len(self.get_wavelength(masked)[::wavelength_plot_every])
+        ys = [self.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=None).T[::wavelength_plot_every][index]
               for index in range(y_len)]
         colors = [cmap(index/(y_len-1)) for index in range(y_len)]
-        plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel=self.variable_name, ylabel='Absorbance',
-                                            xticks=self.variable_factor * self.variable_num)
+        plot_kwargs = Analyzer._set_defaults(plot_kwargs, xlabel=self.variable_name, ylabel='Absorbance',
+                                             xticks=self.variable_factor * self.variable_num)
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=self.get_wavelength(masked)[0],
                                                                  vmax=self.get_wavelength(masked)[-1]))
-        cbar_kwargs = Analyzer.set_defaults(cbar_kwargs, label='Wavelength (nm)', mappable=sm)
+        cbar_kwargs = Analyzer._set_defaults(cbar_kwargs, label='Wavelength (nm)', mappable=sm)
         if save_loc is not None:
             save_loc = os.path.join(save_loc, f'absorbance vs {self.variable_name} with wavelength{save_suffix}.pdf')
         self._1d_lines(xs, ys, plot_kwargs=plot_kwargs, save_loc=save_loc, show=show,
@@ -149,17 +146,17 @@ class Analyzer(DataSet, Plot):
                                                         plot_kwargs=None, cbar_kwargs=None, show=False, **kwargs):
         cmap = plt.get_cmap(self.cmap)
         xs = self.variable_factor * self.variable_num
-        wav_abs_mask = self.get_absorbances(corrected, masked, num, None)[-1, :] > min_absorbance
-        y_len = len(self.wavelength_masked[wav_abs_mask][::wavelength_plot_every])
-        ys = [y / y[-1] for y in (self.get_absorbances(corrected, masked, num, None).T[::wavelength_plot_every][index]
+        wav_abs_mask = self.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=None)[-1, :] > min_absorbance
+        y_len = len(self.get_wavelength(masked)[wav_abs_mask][::wavelength_plot_every])
+        ys = [y / y[-1] for y in (self.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=None).T[::wavelength_plot_every][index]
                                   for index in range(y_len))]
 
         colors = [cmap(index / (y_len - 1)) for index in range(y_len)]
-        plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel=self.variable_name, ylabel='Absorbance',
-                                            xticks=self.variable_factor * self.variable_num)
+        plot_kwargs = Analyzer._set_defaults(plot_kwargs, xlabel=self.variable_name, ylabel='Absorbance',
+                                             xticks=self.variable_factor * self.variable_num)
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=self.get_wavelength(masked)[0],
                                                                  vmax=self.get_wavelength(masked)[-1]))
-        cbar_kwargs = Analyzer.set_defaults(cbar_kwargs, label='Wavelength (nm)', mappable=sm)
+        cbar_kwargs = Analyzer._set_defaults(cbar_kwargs, label='Wavelength (nm)', mappable=sm)
         if save_loc is not None:
             save_loc = os.path.join(save_loc, f'relative absorbance vs {self.variable_name} with wavelength{save_suffix}.pdf')
         self._1d_lines(xs, ys, plot_kwargs=plot_kwargs, save_loc=save_loc, show=show,
@@ -174,30 +171,30 @@ class Analyzer(DataSet, Plot):
                           f' an integer, "plot" is used instead')
             num = 'plot'
 
-        linearity = np.zeros(len(self.wavelength_masked))
-        for i in range(len(self.wavelength_masked)):
-            linearity[i] = scipy.stats.pearsonr(self.variable, self.get_absorbances(True, masked)[:, i])[0]
+        linearity = np.zeros(len(self.get_wavelength(masked)))
+        for i in range(len(self.get_wavelength(masked))):
+            linearity[i] = scipy.stats.pearsonr(self.variable, self.get_absorbances(corrected=True, masked=masked)[:, i])[0]
 
-        linearity_corrected_num = np.zeros(len(self.wavelength_masked))
-        for i in range(len(self.wavelength_masked)):
-            linearity_corrected_num[i] = scipy.stats.pearsonr(self.variable_num, self.get_absorbances(True, masked, num)[:, i])[0]
+        linearity_corrected_num = np.zeros(len(self.get_wavelength(masked)))
+        for i in range(len(self.get_wavelength(masked))):
+            linearity_corrected_num[i] = scipy.stats.pearsonr(self.variable_num, self.get_absorbances(corrected=True, masked=masked, num=num)[:, i])[0]
 
-        linearity_best_num = np.zeros(len(self.wavelength_masked))
-        for i in range(len(self.wavelength_masked)):
-            linearity_best_num[i] = scipy.stats.pearsonr(self.variable_best_num, self.get_absorbances(True, masked, 'best')[:, i])[0]
+        linearity_best_num = np.zeros(len(self.get_wavelength(masked)))
+        for i in range(len(self.get_wavelength(masked))):
+            linearity_best_num[i] = scipy.stats.pearsonr(self.variable_best_num, self.get_absorbances(corrected=True, masked=masked, num='best')[:, i])[0]
 
-        linearity_uncorrected = np.zeros(len(self.wavelength_masked))
-        for i in range(len(self.wavelength_masked)):
-            linearity_uncorrected[i] = scipy.stats.pearsonr(self.variable, self.get_absorbances(False, masked)[:, i])[0]
+        linearity_uncorrected = np.zeros(len(self.get_wavelength(masked)))
+        for i in range(len(self.get_wavelength(masked))):
+            linearity_uncorrected[i] = scipy.stats.pearsonr(self.variable, self.get_absorbances(corrected=False, masked=masked)[:, i])[0]
 
-        linearity_uncorrected_num = np.zeros(len(self.wavelength_masked))
-        for i in range(len(self.wavelength_masked)):
-            linearity_uncorrected_num[i] = scipy.stats.pearsonr(self.variable_num, self.get_absorbances(False, masked, num)[:, i])[0]
+        linearity_uncorrected_num = np.zeros(len(self.get_wavelength(masked)))
+        for i in range(len(self.get_wavelength(masked))):
+            linearity_uncorrected_num[i] = scipy.stats.pearsonr(self.variable_num, self.get_absorbances(corrected=False, masked=masked, num=num)[:, i])[0]
 
-        linearity_uncorrected_best_num = np.zeros(len(self.wavelength_masked))
-        for i in range(len(self.wavelength_masked)):
+        linearity_uncorrected_best_num = np.zeros(len(self.get_wavelength(masked)))
+        for i in range(len(self.get_wavelength(masked))):
             linearity_uncorrected_best_num[i] = \
-            scipy.stats.pearsonr(self.variable_best_num, self.get_absorbances(False, masked, 'best')[:, i])[0]
+            scipy.stats.pearsonr(self.variable_best_num, self.get_absorbances(corrected=False, masked=masked, num='best')[:, i])[0]
 
         r2_mask = (r2_values[0] < linearity ** 2) & (linearity ** 2 < r2_values[1])
         lins = [linearity_corrected_num, linearity_best_num, linearity_uncorrected, linearity_uncorrected_num,
@@ -205,21 +202,21 @@ class Analyzer(DataSet, Plot):
         for lin in lins:
             r2_mask = r2_mask | ((r2_values[0] < lin ** 2) & (lin ** 2 < r2_values[1]))
 
-        wavs = self.wavelength_masked[r2_mask]
+        wavs = self.get_wavelength(masked)[r2_mask]
         dw = np.diff(wavs)
         index = np.nonzero(dw > 10)[0]
         if len(index) > 0:
             r2_mask[index[0] + 1:] = False
 
-        xs = [self.wavelength_masked[r2_mask]] * len(lins)
+        xs = [self.get_wavelength(masked)[r2_mask]] * len(lins)
         ys = [linearity[r2_mask] ** 2, linearity_corrected_num[r2_mask] ** 2, linearity_best_num[r2_mask] ** 2,
               linearity_uncorrected[r2_mask] ** 2, linearity_uncorrected_num[r2_mask] ** 2,
               linearity_uncorrected_best_num[r2_mask] ** 2]
         labels = ['corrected', 'corrected num', 'corrected best num', 'uncorrected', 'uncorrected num',
                   'uncorrected best num']
-        plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel='Wavelength (nm)', ylabel='Linearity coefficient',
-                                            ylim=r2_values)
-        legend_kwargs = Analyzer.set_defaults(legend_kwargs, title='Method')
+        plot_kwargs = Analyzer._set_defaults(plot_kwargs, xlabel='Wavelength (nm)', ylabel='Linearity coefficient',
+                                             ylim=r2_values)
+        legend_kwargs = Analyzer._set_defaults(legend_kwargs, title='Method')
         if save_loc is not None:
             save_loc = os.path.join(save_loc, f'pearson r^2 vs wavelength method comparison{save_suffix}.pdf')
 
@@ -238,42 +235,42 @@ class Analyzer(DataSet, Plot):
         slope = np.zeros(len(self.get_wavelength(masked)))
         slope_std = np.zeros(len(self.get_wavelength(masked)))
         for i in range(len(self.get_wavelength(masked))):
-            result = lin_model.fit(self.get_absorbances(True, masked)[:, i], params, x=self.variable)
+            result = lin_model.fit(self.get_absorbances(corrected=True, masked=masked)[:, i], params, x=self.variable)
             slope[i] = result.params['slope'].value
             slope_std[i] = result.params['slope'].stderr
 
         slope_corrected_num = np.zeros(len(self.get_wavelength(masked)))
         slope_corrected_num_std = np.zeros(len(self.get_wavelength(masked)))
         for i in range(len(self.get_wavelength(masked))):
-            result = lin_model.fit(self.get_absorbances(True, masked, num)[:, i], params, x=self.variable_num)
+            result = lin_model.fit(self.get_absorbances(corrected=True, masked=masked, num=num)[:, i], params, x=self.variable_num)
             slope_corrected_num[i] = result.params['slope'].value
             slope_corrected_num_std[i] = result.params['slope'].stderr
 
         slope_best_num = np.zeros(len(self.get_wavelength(masked)))
         slope_best_num_std = np.zeros(len(self.get_wavelength(masked)))
         for i in range(len(self.get_wavelength(masked))):
-            result = lin_model.fit(self.get_absorbances(True, masked, 'best')[:, i], params, x=self.variable_best_num)
+            result = lin_model.fit(self.get_absorbances(corrected=True, masked=masked, num='best')[:, i], params, x=self.variable_best_num)
             slope_best_num[i] = result.params['slope'].value
             slope_best_num_std[i] = result.params['slope'].stderr
 
         slope_uncorrected = np.zeros(len(self.get_wavelength(masked)))
         slope_uncorrected_std = np.zeros(len(self.get_wavelength(masked)))
         for i in range(len(self.get_wavelength(masked))):
-            result = lin_model.fit(self.get_absorbances(False, masked)[:, i], params, x=self.variable)
+            result = lin_model.fit(self.get_absorbances(corrected=False, masked=masked)[:, i], params, x=self.variable)
             slope_uncorrected[i] = result.params['slope'].value
             slope_uncorrected_std[i] = result.params['slope'].stderr
 
         slope_uncorrected_num = np.zeros(len(self.get_wavelength(masked)))
         slope_uncorrected_num_std = np.zeros(len(self.get_wavelength(masked)))
         for i in range(len(self.get_wavelength(masked))):
-            result = lin_model.fit(self.get_absorbances(False, masked, num)[:, i], params, x=self.variable_num)
+            result = lin_model.fit(self.get_absorbances(corrected=False, masked=masked, num=num)[:, i], params, x=self.variable_num)
             slope_uncorrected_num[i] = result.params['slope'].value
             slope_uncorrected_num_std[i] = result.params['slope'].stderr
 
         slope_uncorrected_best_num = np.zeros(len(self.get_wavelength(masked)))
         slope_uncorrected_best_num_std = np.zeros(len(self.get_wavelength(masked)))
         for i in range(len(self.get_wavelength(masked))):
-            result = lin_model.fit(self.get_absorbances(False, masked, 'best')[:, i], params, x=self.variable_best_num)
+            result = lin_model.fit(self.get_absorbances(corrected=False, masked=masked, num='best')[:, i], params, x=self.variable_best_num)
             slope_uncorrected_best_num[i] = result.params['slope'].value
             slope_uncorrected_best_num_std[i] = result.params['slope'].stderr
 
@@ -281,15 +278,15 @@ class Analyzer(DataSet, Plot):
               slope_uncorrected_best_num]
         labels = ['corrected', 'corrected num', 'corrected best num', 'uncorrected', 'uncorrected num',
                   'uncorrected best num']
-        plot_kwargs = self.set_defaults(plot_kwargs, xlabel='Wavelength (nm)', ylabel='Slope')
-        legend_kwargs = self.set_defaults(legend_kwargs, title='Method')
+        plot_kwargs = self._set_defaults(plot_kwargs, xlabel='Wavelength (nm)', ylabel='Slope')
+        legend_kwargs = self._set_defaults(legend_kwargs, title='Method')
         if save_loc is not None:
             save_loc = os.path.join(save_loc, f'slope vs wavelength method comparison {save_suffix}.pdf')
         self._1d_lines(self.get_wavelength(masked), ys, plot_kwargs=plot_kwargs, legend_kwargs=legend_kwargs,
                        labels=labels, save_loc=save_loc, show=show, **kwargs)
 
         # plot relative slope
-        intensity = self.get_absorbances(True, True, 'plot', np.max(self.variable))
+        intensity = self.get_absorbances(corrected=True, masked=True, num='plot', var_value=np.max(self.variable))
         mask = intensity > min_intensity * np.max(intensity)
 
         y_min, y_max = np.min(slope_uncorrected[mask] / self.absorbances_masked[-1][mask]), np.max(
@@ -304,7 +301,7 @@ class Analyzer(DataSet, Plot):
               slope_uncorrected / self.absorbances_masked[-1],
               slope_uncorrected_num / self.absorbances_masked_num[-1],
               slope_uncorrected_best_num / self.absorbances_masked_best_num[-1]]
-        plot_kwargs = self.set_defaults(plot_kwargs, y_lim=(y_min, y_max))
+        plot_kwargs = self._set_defaults(plot_kwargs, y_lim=(y_min, y_max))
         if save_loc is not None:
             save_loc = os.path.join(save_loc, f'relative slope vs wavelength method comparison{save_suffix}.pdf')
         self._1d_lines(self.get_wavelength(masked), ys, plot_kwargs=plot_kwargs, legend_kwargs=legend_kwargs,
@@ -321,9 +318,9 @@ class Analyzer(DataSet, Plot):
         ratio = []
         ratio_std = []
         max_var = np.max(self.variable)
-        for i in self.get_absorbances(corrected, masked, num, None):
+        for i in self.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=None):
             result = lmfit.minimize(residual, params, args=(i,),
-                                    kws={'reference': self.get_absorbances(corrected, masked, num, max_var)})
+                                    kws={'reference': self.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=max_var)})
             ratio.append(result.params['a'].value)
             ratio_std.append(result.params['a'].stderr)
         ratio = np.array(ratio)
@@ -348,7 +345,7 @@ class Analyzer(DataSet, Plot):
         lines, labels = [], []
         plt.figure()
         for index, var in enumerate(np.unique(self.variable)):
-            plt.plot(self.wavelength_masked, self.absorbances_masked[self.variable == var].T / ratio[self.variable == var], f'C{index}', label=var)
+            plt.plot(self.get_wavelength(True), self.absorbances_masked[self.variable == var].T / ratio[self.variable == var], f'C{index}', label=var)
             lines.append(plt.Line2D([0], [0], color=f'C{index}'))
             labels.append(f'{var}')
         # plt.plot(self.wavelength_masked, self.absorbances_masked.T/ratio, label=self.variable)
@@ -373,17 +370,14 @@ class Analyzer(DataSet, Plot):
         Plot average intensity in each wavelength range vs variable
         """
         xs = self.variable_factor * self.variable_num
-        ys = []
-        labels = []
-        for wav_range in ranges:
-            mask = ((wav_range[0] < self.get_wavelength(masked)) & (self.get_wavelength(masked) < wav_range[1]))
-            labels.append(f'{wav_range[0]:^{wav_range_formatter}}-{wav_range[1]:^{wav_range_formatter}} nm')
-            ys.append(np.average(self.get_absorbances(corrected, masked, num, None).T[mask], axis=0))
-        plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel=self.variable_display_name, ylabel='Absorbance',
-                                            xticks=self.variable_factor * self.variable_num,
-                                            xticklabels=[f'{x:^{xtick_formatter}}' for x in self.variable_factor * self.variable_num])
-        legend_kwargs = Analyzer.set_defaults(legend_kwargs, title='Wavelength range')
-        line_kwargs = Analyzer.set_defaults(line_kwargs, marker='o', linestyle='-')
+        ys = self.get_absorbance_ranges(ranges, corrected=corrected, masked=masked, num=num)
+        labels = [f'{r[0]:^{wav_range_formatter}}-{r[1]:^{wav_range_formatter}} nm' for r in ranges]
+
+        plot_kwargs = Analyzer._set_defaults(plot_kwargs, xlabel=self.variable_display_name, ylabel='Absorbance',
+                                             xticks=self.variable_factor * self.variable_num,
+                                             xticklabels=[f'{x:^{xtick_formatter}}' for x in self.variable_factor * self.variable_num])
+        legend_kwargs = Analyzer._set_defaults(legend_kwargs, title='Wavelength range')
+        line_kwargs = Analyzer._set_defaults(line_kwargs, marker='o', linestyle='-')
         if save_loc is not None:
             save_loc = os.path.join(save_loc, f'Average absorbance in ranges vs {self.variable_name} with{save_suffix}.pdf')
         self._1d_lines(xs, ys, labels=labels, plot_kwargs=plot_kwargs, legend_kwargs=legend_kwargs, save_loc=save_loc,
@@ -397,20 +391,20 @@ class Analyzer(DataSet, Plot):
         Plot the ratio of the average absorbance in ranges1 to the average absorbance in ranges2 vs the variable
         """
         xs = self.variable_factor * self.variable_num
-        mask1 = np.full(self.wavelength_masked.shape, False)
+        mask1 = np.full(self.get_wavelength(masked).shape, False)
         for range in ranges1:
-            mask1 = mask1 | ((range[0] < self.wavelength_masked) & (self.wavelength_masked < range[1]))
-        mask2 = np.full(self.wavelength_masked.shape, False)
+            mask1 = mask1 | ((range[0] < self.get_wavelength(masked)) & (self.get_wavelength(masked) < range[1]))
+        mask2 = np.full(self.get_wavelength(masked).shape, False)
         for range in ranges2:
-            mask2 = mask2 | ((range[0] < self.wavelength_masked) & (self.wavelength_masked < range[1]))
+            mask2 = mask2 | ((range[0] < self.get_wavelength(masked)) & (self.get_wavelength(masked) < range[1]))
 
-        y1 = np.average(self.get_absorbances(corrected, masked, num, None).T[mask1], axis=0)
-        y2 = np.average(self.get_absorbances(corrected, masked, num, None).T[mask2], axis=0)
+        y1 = np.average(self.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=None).T[mask1], axis=0)
+        y2 = np.average(self.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=None).T[mask2], axis=0)
         ys = [y1/y2]
-        plot_kwargs = Analyzer.set_defaults(plot_kwargs, xlabel=self.variable_name, ylabel='Ratio',
-                                            xticks=self.variable_factor * self.variable_num,
-                                            xticklabels=[f'{x:^{xtick_formatter}}' for x in self.variable_factor * self.variable_num])
-        line_kwargs = Analyzer.set_defaults(line_kwargs, marker='o', linestyle='')
+        plot_kwargs = Analyzer._set_defaults(plot_kwargs, xlabel=self.variable_name, ylabel='Ratio',
+                                             xticks=self.variable_factor * self.variable_num,
+                                             xticklabels=[f'{x:^{xtick_formatter}}' for x in self.variable_factor * self.variable_num])
+        line_kwargs = Analyzer._set_defaults(line_kwargs, marker='o', linestyle='')
         if save_loc is not None:
             save_loc = os.path.join(save_loc, f'absorbance vs {self.variable_name} with in ranges{save_suffix}.pdf')
         self._1d_lines(xs, ys, plot_kwargs=plot_kwargs, save_loc=save_loc, show=show, line_kwargs=line_kwargs, **kwargs)
@@ -423,17 +417,17 @@ class Analyzer(DataSet, Plot):
         params = lmfit.Parameters()
         params.add('a', value=1, vary=True)
 
-        result = lmfit.minimize(residual, params, args=(self.get_absorbances(True, True),),
+        result = lmfit.minimize(residual, params, args=(self.get_absorbances(corrected=True, masked=True),),
                                 kws={'concentration': self.variable[:, np.newaxis]})
-        result_num = lmfit.minimize(residual, params, args=(self.get_absorbances(True, True, 'plot'),),
+        result_num = lmfit.minimize(residual, params, args=(self.get_absorbances(corrected=True, masked=True, num='plot'),),
                                     kws={'concentration': self.variable_num[:, np.newaxis]})
-        result_best_num = lmfit.minimize(residual, params, args=(self.get_absorbances(True, True, 'best'),),
+        result_best_num = lmfit.minimize(residual, params, args=(self.get_absorbances(corrected=True, masked=True, num='best'),),
                                          kws={'concentration': self.variable_best_num[:, np.newaxis]})
-        result_uncorr = lmfit.minimize(residual, params, args=(self.get_absorbances(False, True),),
+        result_uncorr = lmfit.minimize(residual, params, args=(self.get_absorbances(corrected=False, masked=True),),
                                        kws={'concentration': self.variable[:, np.newaxis]})
-        result_uncorr_num = lmfit.minimize(residual, params, args=(self.get_absorbances(False, True, 'plot'),),
+        result_uncorr_num = lmfit.minimize(residual, params, args=(self.get_absorbances(corrected=False, masked=True, num='plot'),),
                                            kws={'concentration': self.variable_num[:, np.newaxis]})
-        result_uncorr_best_num = lmfit.minimize(residual, params, args=(self.get_absorbances(False, True, 'best'),),
+        result_uncorr_best_num = lmfit.minimize(residual, params, args=(self.get_absorbances(corrected=False, masked=True, num='best'),),
                                                 kws={'concentration': self.variable_best_num[:, np.newaxis]})
 
         print(
