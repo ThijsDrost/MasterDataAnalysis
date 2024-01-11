@@ -1,5 +1,5 @@
-from Data_analysis.Calibrations.Calibration_analysis import Analyzer
-from General.Data_handling.Import import drive_letter
+from General.Data_handling import Analyzer
+from General.Data_handling import drive_letter
 
 
 line_width = 2  # nm
