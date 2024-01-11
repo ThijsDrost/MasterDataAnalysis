@@ -66,7 +66,7 @@ class Plot:
             plt.close()
 
     @staticmethod
-    def set_defaults(kwargs_dict: dict | None, **kwargs) -> dict:
+    def _set_defaults(kwargs_dict: dict | None, **kwargs) -> dict:
         """
         Set values for a dict. If the dict already has a value for a key, the value is not changed.
 
