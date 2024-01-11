@@ -136,19 +136,19 @@ class DataSet(SimpleDataSet):
                 self._variable_best_num[i] = v
             elif len(nums) == 1:
                 num = self.measurement_num_at_value(v)[0]
-                self._absorbance_best_num[i] = self.get_absorbances(True, False, num, v)
+                self._absorbance_best_num[i] = self.get_absorbances(corrected=True, masked=False, num=num, var_value=v)
                 self._variable_best_num[i] = v
             elif len(nums) >= 2:
                 for pair in itertools.combinations(nums, 2):
-                    intensities = self.get_absorbances(True, True, nums[0], v)
+                    intensities = self.get_absorbances(corrected=True, masked=True, num=nums[0], var_value=v)
                     mask = intensities > 0.1 * np.max(intensities)
-                    value.append(np.sum((self.get_absorbances(False, True, pair[0], v)[mask]
-                                         - self.get_absorbances(False, True, pair[1], v)[mask]) ** 2))
+                    value.append(np.sum((self.get_absorbances(corrected=False, masked=True, num=pair[0], var_value=v)[mask]
+                                         - self.get_absorbances(corrected=False, masked=True, num=pair[1], var_value=v)[mask]) ** 2))
                     pair_values.append(pair)
 
                 min_num = pair_values[np.argmin(value)]
-                self._absorbance_best_num[i] = (self.get_absorbances(False, False, min_num[0], v)
-                                                + self.get_absorbances(False, False, min_num[1], v)) / 2
+                self._absorbance_best_num[i] = (self.get_absorbances(corrected=False, masked=False, num=min_num[0], var_value=v)
+                                                + self.get_absorbances(corrected=False, masked=False, num=min_num[1], var_value=v)) / 2
                 self._variable_best_num[i] = v
             else:
                 raise ValueError(f'No absorbances for variable value {v}')
@@ -187,7 +187,7 @@ class DataSet(SimpleDataSet):
         simple = import_hdf5(loc, species)
         return DataSet.from_simple(simple, wavelength_range, selected_num, baseline_correction)
 
-    def get_absorbances(self, corrected=True, masked=True, num: str | int | None = 'all', var_value=None):
+    def get_absorbances(self, *, corrected=True, masked=True, num: str | int | None = 'all', var_value=None):
         absorbances = self.absorbances
         if corrected:
             absorbances = self.absorbances - self._baseline_correction
@@ -223,9 +223,14 @@ class DataSet(SimpleDataSet):
 
         return absorbances[vn_mask][:, wav_mask]
 
-    @property
-    def wavelength_masked(self):
-        return self.wavelength[self._mask]
+    def get_absorbance_ranges(self, ranges: list[tuple[float, float]], *, corrected=True, masked=True,
+                              num: str | int | None = 'all', var_value=None):
+        absorbances = self.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=var_value)
+        return np.array([np.average(absorbances[:, ((r[0] <= self.get_wavelength(masked))
+                                                    & (self.get_wavelength(masked) <= r[1]))], axis=1) for r in ranges])
+
+    def get_wavelength(self, masked=True):
+        return self.wavelength[self._mask] if masked else self.wavelength
 
     @property
     def variable_num(self):
@@ -239,59 +244,59 @@ class DataSet(SimpleDataSet):
 
     @property
     def absorbances_masked(self):
-        return self.get_absorbances(False, True, None)
+        return self.get_absorbances(corrected=False, masked=True, num=None)
 
     @property
     def absorbances_corrected(self):
-        return self.get_absorbances(True, False, None)
+        return self.get_absorbances(corrected=True, masked=False, num=None)
 
     @property
     def absorbances_masked_corrected(self):
-        return self.get_absorbances(True, True, None)
+        return self.get_absorbances(corrected=True, masked=True, num=None)
 
     @property
     def absorbances_masked_corrected_num(self):
-        return self.get_absorbances(True, True, 'plot')
+        return self.get_absorbances(corrected=True, masked=True, num='plot')
 
     @property
     def absorbances_num(self):
-        return self.get_absorbances(False, False, 'plot')
+        return self.get_absorbances(corrected=False, masked=False, num='plot')
 
     @property
     def absorbances_masked_num(self):
-        return self.get_absorbances(False, True, 'plot')
+        return self.get_absorbances(corrected=False, masked=True, num='plot')
 
     @property
     def absorbances_corrected_num(self):
-        return self.get_absorbances(True, False, 'plot')
+        return self.get_absorbances(corrected=True, masked=False, num='plot')
 
     def absorbances_masked_corrected_at_num(self, num):
-        return self.get_absorbances(True, True, num)
+        return self.get_absorbances(corrected=True, masked=True, num=num)
 
     def absorbances_masked_at_num(self, num):
-        return self.get_absorbances(False, True, num)
+        return self.get_absorbances(corrected=False, masked=True, num=num)
 
     def absorbances_at_num(self, num):
-        return self.get_absorbances(False, False, num)
+        return self.get_absorbances(corrected=False, masked=False, num=num)
 
     def absorbances_corrected_at_num(self, num):
-        return self.get_absorbances(True, False, num)
+        return self.get_absorbances(corrected=True, masked=False, num=num)
 
     @property
     def absorbances_masked_best_num(self):
-        return self.get_absorbances(False, True, 'best')
+        return self.get_absorbances(corrected=False, masked=True, num='best')
 
     @property
     def absorbances_masked_corrected_best_num(self):
-        return self.get_absorbances(True, True, 'best')
+        return self.get_absorbances(corrected=True, masked=True, num='best')
 
     @property
     def absorbances_corrected_best_num(self):
-        return self.get_absorbances(True, False, 'best')
+        return self.get_absorbances(corrected=True, masked=False, num='best')
 
     @property
     def absorbances_best_num(self):
-        return self.get_absorbances(False, False, 'best')
+        return self.get_absorbances(corrected=False, masked=False, num='best')
 
     @property
     def variable_best_num(self):
