@@ -376,3 +376,5 @@ class InterpolationDataSet(SimpleDataSet):
                                     value=np.mean(self.variable))
         return interp_model
 
+    def __call__(self, variable_value):
+        return self.interpolate(variable_value)
