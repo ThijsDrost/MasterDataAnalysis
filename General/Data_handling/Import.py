@@ -110,8 +110,8 @@ class DataSet(SimpleDataSet):
     }
 
     def __init__(self, wavelength, absorbances, variable, measurement_num, variable_name, wavelength_range,
-                 selected_num, baseline_correction=None):
-        super().__init__(wavelength, absorbances, variable, measurement_num, variable_name)
+                 selected_num, baseline_correction=None, calc_best_num=True):
+        SimpleDataSet.__init__(self, wavelength, absorbances, variable, measurement_num, variable_name)
         self.wavelength_range = wavelength_range
         self._selected_num = selected_num
         if wavelength_range is not None:
@@ -120,46 +120,41 @@ class DataSet(SimpleDataSet):
         self.baseline_correction = baseline_correction if baseline_correction is not None else [wavelength[0], wavelength[-1]]
         correction_mask = (self.baseline_correction[0] < wavelength) & (wavelength < self.baseline_correction[1])
         self._baseline_correction = np.mean(absorbances[:, correction_mask], axis=1)[:, np.newaxis]
+        self._calc_best_num = calc_best_num
 
-        self._absorbance_best_num = np.zeros((len(np.unique(variable)), len(self.wavelength)))
-        self._variable_best_num = np.zeros(len(np.unique(variable)))
-        for i, v in enumerate(np.unique(variable)):
-            nums = self.measurement_num_at_value(v)
-            value = []
-            pair_values = []
-            if len(np.unique(nums)) == 1:
-                # TODO: this is a lazy fix, should be done properly, maybe raise a warning that best_num cannot be
-                #  determined, or just remove the option to use best_num, cause it is not very useful. This is used when
-                #  a dataset is made from a simple dataset
-                num = self.measurement_num_at_value(v)[0]
-                self._absorbance_best_num[i] = self.get_absorbances(corrected=False, masked=False, num=num, var_value=v)[0]
-                self._variable_best_num[i] = v
-            elif len(nums) == 1:
-                num = self.measurement_num_at_value(v)[0]
-                self._absorbance_best_num[i] = self.get_absorbances(corrected=True, masked=False, num=num, var_value=v)
-                self._variable_best_num[i] = v
-            elif len(nums) >= 2:
-                for pair in itertools.combinations(nums, 2):
-                    intensities = self.get_absorbances(corrected=True, masked=True, num=nums[0], var_value=v)
-                    mask = intensities > 0.1 * np.max(intensities)
-                    value.append(np.sum((self.get_absorbances(corrected=False, masked=True, num=pair[0], var_value=v)[mask]
-                                         - self.get_absorbances(corrected=False, masked=True, num=pair[1], var_value=v)[mask]) ** 2))
-                    pair_values.append(pair)
+        if calc_best_num:
+            self._absorbance_best_num = np.zeros((len(np.unique(variable)), len(self.wavelength)))
+            self._variable_best_num = np.zeros(len(np.unique(variable)))
+            for i, v in enumerate(np.unique(variable)):
+                nums = self.measurement_num_at_value(v)
+                if len(nums) == 1:
+                    num = self.measurement_num_at_value(v)[0]
+                    self._absorbance_best_num[i] = self.get_absorbances(corrected=True, masked=False, num=num, var_value=v)
+                    self._variable_best_num[i] = v
+                elif len(nums) >= 2:
+                    value = []
+                    pair_values = []
+                    for pair in itertools.combinations(nums, 2):
+                        intensities = self.get_absorbances(corrected=True, masked=True, num=nums[0], var_value=v)
+                        mask = intensities > 0.1 * np.max(intensities)
+                        value.append(np.sum((self.get_absorbances(corrected=False, masked=True, num=pair[0], var_value=v)[mask]
+                                             - self.get_absorbances(corrected=False, masked=True, num=pair[1], var_value=v)[mask]) ** 2))
+                        pair_values.append(pair)
 
-                min_num = pair_values[np.argmin(value)]
-                self._absorbance_best_num[i] = (self.get_absorbances(corrected=False, masked=False, num=min_num[0], var_value=v)
-                                                + self.get_absorbances(corrected=False, masked=False, num=min_num[1], var_value=v)) / 2
-                self._variable_best_num[i] = v
-            else:
-                raise ValueError(f'No absorbances for variable value {v}')
-        self._baseline_correction_best_num = np.mean(self._absorbance_best_num[:, correction_mask], axis=1)[:, np.newaxis]
+                    min_num = pair_values[np.argmin(value)]
+                    self._absorbance_best_num[i] = (self.get_absorbances(corrected=False, masked=False, num=min_num[0], var_value=v)
+                                                    + self.get_absorbances(corrected=False, masked=False, num=min_num[1], var_value=v)) / 2
+                    self._variable_best_num[i] = v
+                else:
+                    raise ValueError(f'No absorbances for variable value {v}')
+            self._baseline_correction_best_num = np.mean(self._absorbance_best_num[:, correction_mask], axis=1)[:, np.newaxis]
 
     @staticmethod
     def from_simple(simple_data_set, wavelength_range=_default_values['wavelength_range'],
                     selected_num=_default_values['selected_num'], baseline_correction=_default_values['baseline_correction']):
         return DataSet(simple_data_set.wavelength, simple_data_set.absorbances, simple_data_set.variable,
                        simple_data_set.measurement_num, simple_data_set.variable_name, wavelength_range, selected_num,
-                       baseline_correction)
+                       baseline_correction, calc_best_num=False)
 
     @staticmethod
     def standard(loc, species, *, wavelength_range=None, selected_num=1, baseline_correction=None):
@@ -213,6 +208,8 @@ class DataSet(SimpleDataSet):
         elif num == 'plot':
             vn_mask = vn_mask & (self.measurement_num == self._selected_num)
         elif num == 'best':
+            if not self._calc_best_num:
+                raise ValueError('Best num not calculated')
             absorbances = self._absorbance_best_num
             if corrected:
                 absorbances = self._absorbance_best_num - self._baseline_correction_best_num
@@ -300,6 +297,8 @@ class DataSet(SimpleDataSet):
 
     @property
     def variable_best_num(self):
+        if not self._calc_best_num:
+            raise ValueError('Best num not calculated')
         return self._variable_best_num
 
     @property
