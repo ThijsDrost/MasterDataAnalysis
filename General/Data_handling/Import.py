@@ -106,7 +106,7 @@ class DataSet(SimpleDataSet):
     _default_values = {
         'wavelength_range': (180, 450),
         'selected_num': 1,
-        'baseline_correction': (180, 450)
+        'baseline_correction': (450, 500)
     }
 
     def __init__(self, wavelength, absorbances, variable, measurement_num, variable_name, wavelength_range,
@@ -117,7 +117,7 @@ class DataSet(SimpleDataSet):
         if wavelength_range is not None:
             self._mask = (wavelength_range[0] < wavelength) & (wavelength < wavelength_range[1])
 
-        self.baseline_correction = baseline_correction if baseline_correction is not None else [wavelength[0], wavelength[-1]]
+        self.baseline_correction = baseline_correction or [wavelength[0], wavelength[-1]]
         correction_mask = (self.baseline_correction[0] < wavelength) & (wavelength < self.baseline_correction[1])
         self._baseline_correction = np.mean(absorbances[:, correction_mask], axis=1)[:, np.newaxis]
         self._calc_best_num = calc_best_num
