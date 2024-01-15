@@ -337,7 +337,8 @@ class InterpolationDataSet(SimpleDataSet):
 
     @staticmethod
     def from_dataset(data_set: DataSet, add_zero=True, corrected=True, num=None):
-        return InterpolationDataSet(data_set.wavelength, data_set.get_absorbances(corrected=corrected, masked=False, num=num),
+        return InterpolationDataSet(data_set.get_wavelength(masked=False),
+                                    data_set.get_absorbances(corrected=corrected, masked=False, num=num),
                                     data_set.variable_at_num(num), data_set.variable_name, add_zero)
 
     def closest(self, variable_value):
