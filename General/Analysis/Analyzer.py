@@ -405,8 +405,8 @@ class Analyzer(Plot):
         for range in ranges2:
             mask2 = mask2 | ((range[0] < self.data_set.get_wavelength(masked)) & (self.data_set.get_wavelength(masked) < range[1]))
 
-        y1 = np.average(self.data_set.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=None)[:, mask1], axis=0)
-        y2 = np.average(self.data_set.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=None)[:, mask2], axis=0)
+        y1 = np.average(self.data_set.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=None)[:, mask1], axis=1)
+        y2 = np.average(self.data_set.get_absorbances(corrected=corrected, masked=masked, num=num, var_value=None)[:, mask2], axis=1)
         ys = [y1/y2]
         plot_kwargs = Analyzer._set_defaults(plot_kwargs, xlabel=self.data_set.variable_name, ylabel='Ratio')
         if variable_val_ticks:
