@@ -39,5 +39,5 @@ def block_averages(a, n):
     values = np.zeros((len(a) // n + extra, *a.shape[1:]))
     values[:num] = np.average(a[:n * num].reshape(*shape), axis=1)
     if a.shape[0] % n != 0:
-        values[-1] = np.average(a[n * num:])
+        values[-1] = np.average(a[n * num:], axis=0)
     return values
