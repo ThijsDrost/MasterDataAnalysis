@@ -117,7 +117,7 @@ class Comsol1DAnalyzer(Plot):
         if cbarticks:
             self._colorbar_ticker(cbar)
 
-        self._setting_setter(ax, **(plot_kwargs or {}))
+        self.setting_setter(ax, **(plot_kwargs or {}))
         plt.tight_layout()
         plt.show()
 
@@ -136,7 +136,7 @@ class Comsol1DAnalyzer(Plot):
         cbar = plt.colorbar(sm, label='Time (s)', ax=ax)
         if cbarticks:
             self._colorbar_ticker(cbar)
-        self._setting_setter(ax, **(plot_kwargs or {}))
+        self.setting_setter(ax, **(plot_kwargs or {}))
         plt.tight_layout()
         plt.show()
 

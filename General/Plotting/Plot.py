@@ -4,8 +4,8 @@ import numpy as np
 
 class Plot:
     @staticmethod
-    def _setting_setter(ax, *, xlabel='', ylabel='', title='', grid=True, xlim=None, ylim=None, xticks=None,
-                        yticks=None, xscale=None, yscale=None, font_size=12, xticklabels=None, yticklabels=None):
+    def setting_setter(ax, *, xlabel='', ylabel='', title='', grid=True, xlim=None, ylim=None, xticks=None,
+                       yticks=None, xscale=None, yscale=None, font_size=12, xticklabels=None, yticklabels=None):
         if xlabel is not None:
             ax.set_xlabel(xlabel)
         if ylabel is not None:
@@ -29,9 +29,9 @@ class Plot:
         plt.rc('font', size=font_size)
 
     @staticmethod
-    def _1d_lines(xs, ys, *, colors=None, labels=None, legend_kwargs: dict = None, save_loc: str = None,
-                  show: bool = False, plot_kwargs: dict = None, cbar_kwargs: dict = None, line_kwargs: dict = None,
-                  save_kwargs: dict = None):
+    def lines(xs, ys, *, colors=None, labels=None, legend_kwargs: dict = None, save_loc: str = None,
+              show: bool = False, plot_kwargs: dict = None, cbar_kwargs: dict = None, line_kwargs: dict = None,
+              save_kwargs: dict = None):
         if colors is None:
             colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
         if labels is None:
@@ -54,7 +54,7 @@ class Plot:
             plt.colorbar(**cbar_kwargs, ax=plt.gca())
 
         plot_kwargs = plot_kwargs or {}
-        Plot._setting_setter(ax, **plot_kwargs)
+        Plot.setting_setter(ax, **plot_kwargs)
 
         plt.tight_layout()
         if save_loc is not None:
@@ -66,7 +66,7 @@ class Plot:
             plt.close()
 
     @staticmethod
-    def _set_defaults(kwargs_dict: dict | None, **kwargs) -> dict:
+    def set_defaults(kwargs_dict: dict | None, **kwargs) -> dict:
         """
         Set values for a dict. If the dict already has a value for a key, the value is not changed.
 
