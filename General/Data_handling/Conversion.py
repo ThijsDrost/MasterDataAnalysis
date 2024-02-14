@@ -11,7 +11,8 @@ from General.Data_handling.Data_import import SpectroData
 
 def main():
     loc = r'E:\OneDrive - TU Eindhoven\Master thesis\Measurements\24_01_26 H2O2 Conc 2112120U1'
-    make_hdf5(loc, FIND_METHODS[0], SPECTRUM_TYPE[1], MULTI_METHODS[0])
+    make_hdf5(loc, FIND_METHODS[0], SPECTRUM_TYPE[1], {'dark': MULTI_METHODS[0], 'reference': MULTI_METHODS[0], 'measurement': MULTI_METHODS[2]},
+              name='data.hdf5')
 
 
 SPECIES = ['NO2-', 'H2O2', 'NO3-']
@@ -19,7 +20,7 @@ SKIP_NAMES = ['dark', '.hdf5', 'notes', 'pH', 'conductivity']
 SPECTRUM_TYPE = ['spectrum', 'absorbance', 'intensity']
 FIND_METHODS = ['ref_interpolate', 'interpolate', 'closest_before', 'closest']
 REFERENCE_NAMES = ['ref', 'reference']
-MULTI_METHODS = ['mean', 'median']
+MULTI_METHODS = ['mean', 'median', None]
 
 
 def read_file(loc):
@@ -45,7 +46,7 @@ def check_skip(file):
     return False
 
 
-def make_hdf5(loc, find_method, spectrum_type, multi_method='mean'):
+def make_hdf5(loc, find_method, spectrum_type, multi_methods: dict, name='data'):
     if os.path.exists(rf"{loc}\pH.txt"):
         pH = read_file(rf"{loc}\pH.txt")
     else:
@@ -82,16 +83,19 @@ def make_hdf5(loc, find_method, spectrum_type, multi_method='mean'):
     elif (not dir) and (not file):
         raise FileNotFoundError(f"{loc} contains no files nor folders")
 
+    if not name.endswith('.hdf5'):
+        name += '.hdf5'
+
     if file:
-        with h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file:
-            read_folder(loc, hdf5_file, notes, pH, conductivity, species_dicts, find_method, spectrum_type, multi_method)
+        with h5py.File(rf"{loc}\{name}", 'w') as hdf5_file:
+            read_folder(loc, hdf5_file, notes, pH, conductivity, species_dicts, find_method, spectrum_type, multi_methods)
     else:
-        with h5py.File(rf"{loc}\data.hdf5", 'w') as hdf5_file:
+        with h5py.File(rf"{loc}\{name}", 'w') as hdf5_file:
             start = time.time()
             folders = [folder for folder in os.scandir(loc) if folder.is_dir()]
             for index, folder in enumerate(folders):
                 group = hdf5_file.create_group(folder.name)
-                read_folder(folder.path, group, notes, pH, conductivity, species_dicts, find_method, spectrum_type, multi_method)
+                read_folder(folder.path, group, notes, pH, conductivity, species_dicts, find_method, spectrum_type, multi_methods)
                 dt = time.time() - start
                 time_left = (len(folders) - index - 1) * dt / (index + 1)
                 hours, rem = divmod(time_left, 3600)
@@ -100,13 +104,16 @@ def make_hdf5(loc, find_method, spectrum_type, multi_method='mean'):
 
 
 def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dicts=None, find_method='closest_before', spectrum_type='absorbance',
-                multi_method='mean'):
+                multi_methods: dict = None):
     if find_method not in FIND_METHODS:
-        raise ValueError(f"find_method {find_method} not recognized, should be in {FIND_METHODS}")
+        raise ValueError(f"find_method `{find_method}` not recognized, should be in {FIND_METHODS}")
     if spectrum_type not in SPECTRUM_TYPE:
-        raise ValueError(f"spectrum_type {spectrum_type} not recognized, should be in {SPECTRUM_TYPE}")
-    if multi_method not in MULTI_METHODS:
-        raise ValueError(f"multi_method {multi_method} not recognized, should be in {MULTI_METHODS}")
+        raise ValueError(f"spectrum_type `{spectrum_type}` not recognized, should be in {SPECTRUM_TYPE}")
+    if multi_methods is None:
+        multi_methods = {key: 'mean' for key in ('dark', 'reference', 'measurement')}
+    for key in multi_methods:
+        if multi_methods[key] not in MULTI_METHODS:
+            raise ValueError(f"multi_method `{multi_methods[key]}` for {key} not recognized, should be in {MULTI_METHODS}")
 
     files = [file for file in os.scandir(loc) if file.is_file()]
 
@@ -155,7 +162,7 @@ def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dict
             extension = ext
 
         if spectrum_type == 'intensity':
-            spectrum = data.get_intensity(multi_method)
+            spectrum = data.get_intensity(multi_methods['measurement'])
 
         if (spectrum_type == 'spectrum') or (spectrum_type == 'absorbance'):
             if not (data == dark_reads[0]):
@@ -188,8 +195,8 @@ def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dict
             if not math.isclose(np.sum(dark_weights),  1, abs_tol=1e-3):
                 warnings.warn(f"{file.name}: dark weights do not sum to 1, {dark_weights} used")
 
-            dark = np.average([dark.get_intensity(multi_method) for dark in dark_reads], axis=0, weights=dark_weights)
-            spectrum = data.intensity - dark
+            dark = np.average([dark.get_intensity(multi_methods['dark']) for dark in dark_reads], axis=0, weights=dark_weights)
+            spectrum = data.get_intensity(multi_methods['measurement']) - dark
 
         if spectrum_type == 'absorbance':
             if find_method == 'closest_before':
@@ -214,15 +221,15 @@ def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dict
             if not math.isclose(np.sum(reference_weights), 1, abs_tol=1e-3):
                 warnings.warn(f"{file.name}: reference weights do not sum to 1, {reference_weights} used")
 
-            reference = np.average([reference.get_intensity(multi_method) for reference in reference_reads], axis=0, weights=reference_weights)
-            spectrum = -np.log10((data.intensity - dark) / (reference - dark))
+            reference = np.average([reference.get_intensity(multi_methods['reference']) for reference in reference_reads], axis=0, weights=reference_weights)
+            spectrum = -np.log10((data.get_intensity(multi_methods['measurement']) - dark) / (reference - dark))
 
         dataset = hdf5_place.create_dataset(file.name, data=spectrum)
         dataset.attrs.create('averaging', data.averaging)
         dataset.attrs.create('timestamp_s', data.timestamp_ms)
         dataset.attrs.create('spectrum_type', spectrum_type)
         dataset.attrs.create('find_method', find_method)
-        dataset.attrs.create('multi_method', multi_method)
+        dataset.attrs.create('multi_method', multi_methods)
 
         if pH is not None:
             dataset.attrs.create('pH', pH[int(file.name.split('_')[0])])

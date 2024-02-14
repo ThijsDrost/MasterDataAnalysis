@@ -51,8 +51,10 @@ class SpectroData:
             return np.sum(self.intensity, axis=1)
         elif multi_method == 'median':
             return np.median(self.intensity, axis=1)
+        elif (multi_method is None) or (multi_method in ('none', 'raw', 'all')):
+            return self.intensity
         else:
-            raise ValueError(f'`multi_method` should be one of `mean`, `sum` or `median` not {multi_method}')
+            raise ValueError(f'`multi_method` should be one of `mean`, `sum`, `median`, or `all`, not {multi_method}')
 
     @staticmethod
     def read_data(filename):
