@@ -92,7 +92,7 @@ for j in range(len(data)):
 
     labels = ['H2O2 r', 'NO3 r', 'NO2 r', 'H2O2 s', 'NO3 s', 'NO2 s']
     plt.legend([(p1, f1), (p2, f2), (p3, f3), (p1_2, f1_2), (p2_2, f2_2), (p3_2, f3_2)], labels)
-    plt.savefig(f'D:/Downloads/test_image.pdf')
+    # plt.savefig(f'D:/Downloads/test_image.pdf')
     plt.show()
 
     print(f'{j}/{len(data)}')

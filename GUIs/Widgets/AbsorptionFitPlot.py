@@ -1,8 +1,8 @@
 import lmfit
 import numpy as np
 
-from SpectrometerGUI.Spectrometer.Widgets.SpectraPlot import SpectraPlot
-from SpectrometerGUI.Spectrometer.Widgets.LineErrorPlot import LineErrorPlot
+from GUIs.Widgets.SpectraPlot import SpectraPlot
+from GUIs.Widgets.LineErrorPlot import LineErrorPlot
 
 
 class AbsorptionFitPlot(SpectraPlot):

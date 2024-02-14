@@ -45,6 +45,14 @@ class SpectraPlot:
         self.update_limits()
         self.canvas.draw()
 
+    def remove_line(self, index):
+        self._lines.pop(index).remove()
+
+    def clear(self):
+        for line in self._lines:
+            line.remove()
+        self._lines = []
+
     def plot_line(self, x, y):
         self._plot_line(x, y, self._lines)
 

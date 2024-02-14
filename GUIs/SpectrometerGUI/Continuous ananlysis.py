@@ -1,4 +1,4 @@
-from SpectrometerGUI.Spectrometer.Measure_GUI import MeasureGUI, create_background, create_background_reference
+from GUIs.SpectrometerGUI.Spectrometer.Measure_GUI import MeasureGUI, create_background, create_background_reference
 
 database_loc = r'C:\Users\20222772\Downloads\test.hdf5'
 measurement = r'2022-10-24_test'
