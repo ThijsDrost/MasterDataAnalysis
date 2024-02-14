@@ -66,6 +66,16 @@ class SpectroData:
             message = message + f"spectrometer: {self.serial_number} vs {other.serial_number}\n"
         return message.removesuffix('\n')
 
+    def get_intensity(self, multi_method='mean'):
+        if multi_method in ('mean', 'average'):
+            return np.mean(self.intensity, axis=1)
+        elif multi_method in ('sum', 'total'):
+            return np.sum(self.intensity, axis=1)
+        elif multi_method == 'median':
+            return np.median(self.intensity, axis=1)
+        else:
+            raise ValueError(f'`multi_method` should be one of `mean`, `sum` or `median` not {multi_method}')
+
     @staticmethod
     def read_data(filename):
         if filename.lower().endswith('raw8'):
@@ -78,35 +88,46 @@ class SpectroData:
     @staticmethod
     def read_txt(filename):
         with open(filename, 'r') as file:
+            # Old unknown legacy code
             if len(read_lines := file.readlines()) == 4:
                 lines = [x.replace('\n', '') for x in read_lines]
                 if len(lines) < 4:
                     return None
-                return SpectroData(np.fromstring(lines[0], sep=' '), np.fromstring(lines[1], sep=' '), lines[2], 2048,
-                                   int(lines[3]), 1, int(lines[4]), 0)
+                return SpectroData(np.fromstring(lines[0], sep=' '), np.fromstring(lines[1], sep=' '), lines[2], int(lines[3]), 1, int(lines[4]), 0)
+        return SpectroData._read_ava_txt(read_lines, filename)
 
-            serial_number = read_lines[4].split(':')[1].strip()
-            integration_time = float(read_lines[1].split(':')[1].strip().replace(',', '.'))
-            n_averages = int(read_lines[2].split(':')[1].strip())
-            n_smoothing = int(read_lines[3].split(':')[1].strip())
-            timestamp_ms = int(os.path.getmtime(filename) * 1000)
+    @staticmethod
+    def _read_ava_txt(lines: list[str], filename):
+        if lines[2].startswith('Nr. of StoreToRam scans'):
+            return SpectroData._read_ava_multi_txt(lines, filename)
+        elif lines[2].startswith('Integration time'):
+            return SpectroData._read_ava_single_txt(lines, filename)
+        else:
+            raise ValueError(f'File {filename} does not contain the expected header')
 
-            if len(read_lines[-1].split(';')) == 5:
-                wavelength = np.array([float(line.split(';')[0].replace(',', '.')) for line in read_lines[8:-1]])
-                intensity = np.array([float(line.split(';')[1].replace(',', '.')) for line in read_lines[8:-1]])
-                return SpectroData(wavelength, intensity, serial_number, 2048, integration_time, n_averages, n_smoothing, timestamp_ms)
+    @staticmethod
+    def _read_ava_multi_txt(lines: list[str], filename):
+        serial_number = lines[4].split(':')[1].strip()
+        integration_time = float(lines[1].split(':')[1].strip().replace(',', '.'))
+        n_smoothing = int(lines[2].split(':')[1].strip())
+        timestamp_ms = int(os.path.getmtime(filename) * 1000)
 
-            else:
-                reference = pd.read_csv(file, sep=';', skiprows=9, decimal=',', index_col=0)
-                reference = reference.drop([reference.columns[0], reference.columns[1]], axis=1)
-                reference_std = reference.std(axis=1)
-                if reference_std.max() > 0.1:
-                    warnings.warn('Reference spectrum not stable')
-                reference_median = reference.mean(axis=1)
-                return SpectroData(reference_median.index, reference_median, serial_number, 2048, integration_time,
-                                   n_averages*reference.shape[1], n_smoothing, timestamp_ms)
+        file = pd.read_csv(filename, sep=';', skiprows=9, decimal=',', index_col=0)
+        spectra = file.drop([file.columns[0], file.columns[1]], axis=1)
+        return SpectroData(spectra.index, spectra.to_numpy(), serial_number, integration_time, file.shape[1], n_smoothing, timestamp_ms)
 
+    @staticmethod
+    def _read_ava_single_txt(lines: list[str], filename):
+        serial_number = lines[4].split(':')[1].strip()
+        integration_time = float(lines[1].split(':')[1].strip().replace(',', '.'))
+        n_averages = int(lines[2].split(':')[1].strip())
+        n_smoothing = int(lines[3].split(':')[1].strip())
+        timestamp_ms = int(os.path.getmtime(filename) * 1000)
 
+        wavelength = np.array([float(line.split(';')[0].replace(',', '.')) for line in lines[8:-1]])
+        intensity = np.array([float(line.split(';')[1].replace(',', '.')) for line in lines[8:-1]])
+
+        return SpectroData(wavelength, intensity, serial_number, integration_time, n_averages, n_smoothing, timestamp_ms)
 
     @staticmethod
     def read_raw8(filename):
