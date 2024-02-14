@@ -13,13 +13,10 @@ class SpectroData:
     wavelength: np.ndarray
     intensity: np.ndarray
     serial_number: str
-    pixels: int
     integration_time_ms: float
     n_averages: int
     n_smoothing: int
     time_ms: int
-    dark: np.ndarray = None
-    reference: np.ndarray = None
 
     def __eq__(self, other):
         return self.same_measurement(other)
@@ -36,25 +33,6 @@ class SpectroData:
         if not (np.all(self.wavelength == measurement.wavelength)):
             return False
         return True
-
-    def dark_corrected_intensity(self):
-        if self.dark is None:
-            raise ValueError('Dark spectrum not taken')
-        return self.intensity - self.dark
-
-    def transmittance(self):
-        if self.dark is None:
-            raise ValueError('Dark spectrum not taken')
-        if self.reference is None:
-            raise ValueError('Reference spectrum not taken')
-        return 100*(self.intensity-self.dark)/(self.intensity-self.dark)
-
-    def absorbance(self):
-        if self.dark is None:
-            raise ValueError('Dark spectrum not taken')
-        if self.reference is None:
-            raise ValueError('Reference spectrum not taken')
-        return -1*np.log10((self.intensity-self.dark)/(self.intensity-self.dark))
 
     def give_diff(self, other):
         message = ""
@@ -83,7 +61,7 @@ class SpectroData:
         elif filename.lower().endswith('txt'):
             return SpectroData.read_txt(filename)
         else:
-            raise ValueError('Extension not recognized')
+            raise NotImplementedError(f'Extension `{filename.split('.')[-1]}` not implemented, only `.txt` and `.raw8` are supported.')
 
     @staticmethod
     def read_txt(filename):
