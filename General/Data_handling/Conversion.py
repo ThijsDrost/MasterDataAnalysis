@@ -10,17 +10,21 @@ from General.Data_handling.Data_import import SpectroData
 
 
 def main():
-    loc = r'E:\OneDrive - TU Eindhoven\Master thesis\Measurements\24_01_26 H2O2 Conc 2112120U1'
-    make_hdf5(loc, FIND_METHODS[0], SPECTRUM_TYPE[1], {'dark': MULTI_METHODS[0], 'reference': MULTI_METHODS[0], 'measurement': MULTI_METHODS[2]},
+    loc = r'E:\OneDrive - TU Eindhoven\Master thesis\Measurements\Calibration\Stability'
+    make_hdf5(loc, FIND_METHODS[0], SPECTRUM_TYPE[2], {'dark': MULTI_METHODS[0], 'reference': MULTI_METHODS[0], 'measurement': MULTI_METHODS[1]},
               name='data.hdf5')
 
 
-SPECIES = ['NO2-', 'H2O2', 'NO3-']
-SKIP_NAMES = ['dark', '.hdf5', 'notes', 'pH', 'conductivity']
-SPECTRUM_TYPE = ['spectrum', 'absorbance', 'intensity']
+# CONSTANTS
+# settings values
+SPECTRUM_TYPE = ['spectrum', 'absorbance', 'intensity']  # spectrum = measurement-dark, absorbance = -log10((measurement-dark)/(reference-dark)), intensity = measurement
 FIND_METHODS = ['ref_interpolate', 'interpolate', 'closest_before', 'closest']
+MULTI_METHODS = ['mean', 'median']
+
+# names
+SPECIES = ['NO2-', 'H2O2', 'NO3-']
+SKIP_NAMES = ['dark', '.hdf5', 'notes', 'pH', 'conductivity', 'skip']
 REFERENCE_NAMES = ['ref', 'reference']
-MULTI_METHODS = ['mean', 'median', None]
 
 
 def read_file(loc):
@@ -46,7 +50,7 @@ def check_skip(file):
     return False
 
 
-def make_hdf5(loc, find_method, spectrum_type, multi_methods: dict, name='data'):
+def make_hdf5(loc, find_method, spectrum_type, multi_methods: dict, out_loc='data'):
     if os.path.exists(rf"{loc}\pH.txt"):
         pH = read_file(rf"{loc}\pH.txt")
     else:
@@ -83,14 +87,15 @@ def make_hdf5(loc, find_method, spectrum_type, multi_methods: dict, name='data')
     elif (not dir) and (not file):
         raise FileNotFoundError(f"{loc} contains no files nor folders")
 
-    if not name.endswith('.hdf5'):
-        name += '.hdf5'
+    if not out_loc.endswith('.hdf5'):
+        out_loc += '.hdf5'
 
     if file:
-        with h5py.File(rf"{loc}\{name}", 'w') as hdf5_file:
+        with h5py.File(rf"{out_loc}", 'w') as hdf5_file:
             read_folder(loc, hdf5_file, notes, pH, conductivity, species_dicts, find_method, spectrum_type, multi_methods)
     else:
-        with h5py.File(rf"{loc}\{name}", 'w') as hdf5_file:
+        warnings.warn('Nested folders structure found, this creates a nested hdf5 structure, which is not supported by the standard data analysis.')
+        with h5py.File(rf"{out_loc}", 'w') as hdf5_file:
             start = time.time()
             folders = [folder for folder in os.scandir(loc) if folder.is_dir()]
             for index, folder in enumerate(folders):
@@ -117,23 +122,26 @@ def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dict
 
     files = [file for file in os.scandir(loc) if file.is_file()]
 
-    if find_method is not None:
+    if not (spectrum_type == 'intensity'):
         dark_files = [file for file in files if 'dark' in file.name]
         dark_reads = [SpectroData.read_data(file.path) for file in dark_files]
-        dark_times = np.array([x.timestamp_ms for x in dark_reads])
-        if len(dark_reads) > 1:
-            for i in range(1, len(dark_reads)):
-                if not (dark_reads[0] == dark_reads[i]):
-                    raise ValueError(f"{dark_files[i].name}: {dark_reads[i].give_diff(dark_reads[0])}")
+        if len(dark_files) == 0:
+            raise FileNotFoundError(f"No dark files found in {loc}")
 
+        for i in range(1, len(dark_reads)):
+            if not (dark_reads[0] == dark_reads[i]):
+                raise ValueError(f"{dark_files[i].name}: {dark_reads[i].give_diff(dark_reads[0])}")
+
+    if spectrum_type == 'absorbance':
         reference_files = []
         for file in files:
             for reference_name in REFERENCE_NAMES:
                 if reference_name in file.name.lower():
                     reference_files.append(file)
+        if len(reference_files) == 0:
+            raise FileNotFoundError(f"No reference files found in {loc}")
 
         reference_reads = [SpectroData.read_data(file.path) for file in reference_files]
-        reference_times = np.array([x.timestamp_ms for x in reference_reads])
         for i in range(len(reference_files)):
             if not (reference_reads[0] == reference_reads[i]):
                 raise ValueError(f"{reference_files[i].name}: {reference_reads[i].give_diff(reference_reads[0])}")
@@ -141,12 +149,16 @@ def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dict
         if not (dark_reads[0] == reference_reads[0]):
             raise ValueError(f"{reference_files[0].name}: {reference_reads[0].give_diff(dark_reads[0])}")
 
-    temp_read = SpectroData.read_data(files[0].path)
+    temp_file = [file for file in files if (not check_skip(file))][0]
+    temp_read = SpectroData.read_data(temp_file.path)
     hdf5_place.attrs.create('wavelength', temp_read.wavelength)
-    hdf5_place.attrs.create('integration_time_ms', temp_read.integration_time)
-    hdf5_place.attrs.create('smoothing', temp_read.smoothing)
-    hdf5_place.attrs.create('spectrometer', temp_read.spectrometer)
+    hdf5_place.attrs.create('integration_time_ms', temp_read.integration_time_ms)
+    hdf5_place.attrs.create('smoothing', temp_read.n_smoothing)
+    hdf5_place.attrs.create('spectrometer', temp_read.serial_number)
     hdf5_place.attrs.create('notes', notes)
+    hdf5_place.attrs.create('spectrum_type', spectrum_type)
+    hdf5_place.attrs.create('find_method', find_method)
+    hdf5_place.attrs.create('multi_method', multi_methods['measurement'])
 
     extension = None
     for file in os.scandir(loc):
@@ -164,72 +176,74 @@ def read_folder(loc, hdf5_place, notes, pH=None, conductivity=None, species_dict
         if spectrum_type == 'intensity':
             spectrum = data.get_intensity(multi_methods['measurement'])
 
+        def get_value(timestamp, datas, find_method):
+            timestamps = np.array([x.timestamp_ms for x in datas])
+            found = True
+            weights = np.zeros(len(dark_reads))
+
+            if find_method == 'closest_before':
+                dark_arg = np.argwhere(timestamp > timestamps)[0]
+                if dark_arg.size == 0:
+                    warnings.warn(f"{file.name}: no earlier dark found, closest one used")
+                    found = False
+                else:
+                    weights[dark_arg[0]] = 1
+
+            if (find_method == 'closest') or (not found) or (find_method == 'ref_interpolate'):
+                best_dark_index = np.argmin(np.abs(timestamp - timestamps))
+                weights[best_dark_index] = 1
+
+            if find_method == 'interpolate':
+                if len(timestamps) == 1:
+                    warnings.warn(f"{file.name}: only one dark found, no interpolation used")
+                    weights[0] = 1
+                else:
+                    weights = interpolate_weights(timestamp, timestamps)
+
+            if not math.isclose(np.sum(weights), 1, abs_tol=1e-3):
+                warnings.warn(f"{file.name}: dark weights do not sum to 1, {weights} used")
+
+            return np.average([dark.get_intensity(multi_methods['dark']) for dark in dark_reads], axis=0, weights=weights)
+
         if (spectrum_type == 'spectrum') or (spectrum_type == 'absorbance'):
             if not (data == dark_reads[0]):
                 raise ValueError(f"{file.name}: {data.give_diff(dark_reads[0])}")
 
-            dark_found = True
-            reference_found = True
-            dark_weights = np.zeros(len(dark_reads))
-            reference_weights = np.zeros(len(reference_reads))
-
-            if find_method == 'closest_before':
-                dark_arg = np.argwhere(data.timestamp_ms > dark_times)[0]
-                if dark_arg.size == 0:
-                    warnings.warn(f"{file.name}: no earlier dark found, closest one used")
-                    dark_found = False
-                else:
-                    dark_weights[dark_arg[0]] = 1
-
-            if (find_method == 'closest') or (not dark_found) or (find_method == 'ref_interpolate'):
-                best_dark_index = np.argmin(np.abs(data.timestamp_ms - dark_times))
-                dark_weights[best_dark_index] = 1
-
-            if find_method == 'interpolate':
-                if len(dark_times) == 1:
-                    warnings.warn(f"{file.name}: only one dark found, no interpolation used")
-                    dark_weights[0] = 1
-                else:
-                    dark_weights = interpolate_weights(data.timestamp_ms, dark_times)
-
-            if not math.isclose(np.sum(dark_weights),  1, abs_tol=1e-3):
-                warnings.warn(f"{file.name}: dark weights do not sum to 1, {dark_weights} used")
-
-            dark = np.average([dark.get_intensity(multi_methods['dark']) for dark in dark_reads], axis=0, weights=dark_weights)
+            dark = get_value(data.time_ms, dark_reads, find_method)
             spectrum = data.get_intensity(multi_methods['measurement']) - dark
 
         if spectrum_type == 'absorbance':
-            if find_method == 'closest_before':
-                reference_arg = np.argwhere(data.timestamp_ms > reference_times)[0]
-                if reference_arg.size == 0:
-                    warnings.warn(f"{file.name}: no earlier reference found, closest one used")
-                    reference_found = False
-                else:
-                    reference_weights[reference_arg[0]] = 1
+            if not (data == reference_reads[0]):
+                raise ValueError(f"{file.name}: {data.give_diff(reference_reads[0])}")
 
-            if (find_method == 'closest') or (not reference_found):
-                best_reference_index = np.argmin(np.abs(data.timestamp_ms - reference_times))
-                reference_weights[best_reference_index] = 1
-
-            if (find_method == 'interpolate') or (find_method == 'ref_interpolate'):
-                if len(reference_times) == 1:
-                    warnings.warn(f"{file.name}: only one reference found, no interpolation used")
-                    reference_weights[0] = 1
-                else:
-                    reference_weights = interpolate_weights(data.timestamp_ms, reference_times)
-
-            if not math.isclose(np.sum(reference_weights), 1, abs_tol=1e-3):
-                warnings.warn(f"{file.name}: reference weights do not sum to 1, {reference_weights} used")
-
-            reference = np.average([reference.get_intensity(multi_methods['reference']) for reference in reference_reads], axis=0, weights=reference_weights)
+            reference = get_value(data.time_ms, reference_reads, find_method)
             spectrum = -np.log10((data.get_intensity(multi_methods['measurement']) - dark) / (reference - dark))
 
+        if len(data.intensity.shape) == 2:
+            with h5py.File('.'.join(file.path.split('.')[:-1])+'.hdf5', 'w') as sub_file:
+                if spectrum_type == 'intensity':
+                    full_spectrum = data.get_intensity(None)
+                elif spectrum_type == 'spectrum':
+                    full_spectrum = full_spectrum - dark
+                elif spectrum_type == 'absorbance':
+                    full_spectrum = -np.log10((data.get_intensity(None) - dark) / (reference - dark))
+                else:
+                    raise ValueError(f"spectrum_type `{spectrum_type}` not recognized, should be in {SPECTRUM_TYPE}")
+
+                for t, s in zip(data.relative_times_ms, full_spectrum.T, strict=True):
+                    sub_dataset = sub_file.create_dataset(str(t), data=s)
+                    sub_dataset.attrs.create('relative_timestamp_s', t/1000)
+
+                if pH is not None:
+                    sub_file.attrs.create('pH', pH[int(file.name.split('_')[0])])
+                if conductivity is not None:
+                    sub_file.attrs.create('conductivity', conductivity[int(file.name.split('_')[0])])
+                for specie, specie_dict in species_dicts.items():
+                    sub_file.attrs.create(specie, specie_dict[int(file.name.split('_')[0])])
+
         dataset = hdf5_place.create_dataset(file.name, data=spectrum)
-        dataset.attrs.create('averaging', data.averaging)
-        dataset.attrs.create('timestamp_s', data.timestamp_ms)
-        dataset.attrs.create('spectrum_type', spectrum_type)
-        dataset.attrs.create('find_method', find_method)
-        dataset.attrs.create('multi_method', multi_methods)
+        dataset.attrs.create('averaging', data.n_averages)
+        dataset.attrs.create('timestamp_s', data.time_ms/1000)
 
         if pH is not None:
             dataset.attrs.create('pH', pH[int(file.name.split('_')[0])])

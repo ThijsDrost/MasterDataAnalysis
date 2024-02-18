@@ -17,6 +17,13 @@ class SpectroData:
     n_averages: int
     n_smoothing: int
     time_ms: int
+    relative_times_ms: np.ndarray = None
+
+    def __post_init__(self):
+        if not isinstance(self.wavelength, np.ndarray):
+            self.wavelength = np.array(self.wavelength)
+        if not isinstance(self.intensity, np.ndarray):
+            self.intensity = np.array(self.intensity)
 
     def __eq__(self, other):
         return self.same_measurement(other)
@@ -45,6 +52,9 @@ class SpectroData:
         return message.removesuffix('\n')
 
     def get_intensity(self, multi_method='mean'):
+        if self.intensity.ndim == 1:
+            return self.intensity
+
         if multi_method in ('mean', 'average'):
             return np.mean(self.intensity, axis=1)
         elif multi_method in ('sum', 'total'):
@@ -80,7 +90,7 @@ class SpectroData:
     def _read_ava_txt(lines: list[str], filename):
         if lines[2].startswith('Nr. of StoreToRam scans'):
             return SpectroData._read_ava_multi_txt(lines, filename)
-        elif lines[2].startswith('Integration time'):
+        elif lines[2].startswith('Averaging Nr.'):
             return SpectroData._read_ava_single_txt(lines, filename)
         else:
             raise ValueError(f'File {filename} does not contain the expected header')
@@ -91,10 +101,11 @@ class SpectroData:
         integration_time = float(lines[1].split(':')[1].strip().replace(',', '.'))
         n_smoothing = int(lines[2].split(':')[1].strip())
         timestamp_ms = int(os.path.getmtime(filename) * 1000)
+        timestamps_ms = np.array([float(x.replace(',', '.').strip())/100 for x in lines[9].split(';')[3:]])
 
         file = pd.read_csv(filename, sep=';', skiprows=9, decimal=',', index_col=0)
         spectra = file.drop([file.columns[0], file.columns[1]], axis=1)
-        return SpectroData(spectra.index, spectra.to_numpy(), serial_number, integration_time, file.shape[1], n_smoothing, timestamp_ms)
+        return SpectroData(spectra.index, spectra.to_numpy(), serial_number, integration_time, file.shape[1], n_smoothing, timestamp_ms, timestamps_ms)
 
     @staticmethod
     def _read_ava_single_txt(lines: list[str], filename):
@@ -122,9 +133,9 @@ class SpectroData:
         h['serial_number'] = data.header['specID'].decode('utf-8')[:-1]
         h['n_averages'] = data.header['Avg']
         h['n_smoothing'] = data.header['Boxcar']
-        h['pixels'] = data.header['stopPixel'] - data.header['startPixel'] + 1
-        h['dark'] = np.array(data.data['dark'])
-        h['reference'] = np.array(data.data['ref'])
+        # h['pixels'] = data.header['stopPixel'] - data.header['startPixel'] + 1
+        # h['dark'] = np.array(data.data['dark'])
+        # h['reference'] = np.array(data.data['ref'])
         h['time_ms'] = int(1000*data.header['timestamp'])
         return SpectroData(**h)
 

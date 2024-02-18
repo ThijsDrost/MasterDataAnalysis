@@ -1,6 +1,5 @@
 import os
 import itertools
-import warnings
 
 import numpy as np
 import h5py
@@ -27,21 +26,29 @@ def import_hdf5(loc, dependent):
             else:
                 raise TypeError(f'Unknown type: {type(file[key])}')
 
-        if has_group and has_dataset:
-            warnings.warn(f'File {loc} contains both groups and datasets. Only datasets will be imported.')
-        elif (not has_group) and (not has_dataset):
-            raise ValueError(f'File {loc} contains neither groups nor datasets.')
-
-        if has_dataset:
+        if has_group:
+            raise NotImplementedError('Groups are not implemented.')
+        elif has_dataset:
             return import_datasets(file, dependent)
         else:
-            results = []
-            for group in file.keys():
-                for thing in file[group].keys():
-                    if isinstance(file[group][thing], h5py.Group):
-                        raise NotImplementedError('Nested groups are not implemented.')
-                results.append(import_datasets(file[group], dependent))
-            return results
+            raise ValueError(f'File {loc} contains neither groups nor datasets.')
+
+        # if has_group and has_dataset:
+        #     warnings.warn(f'File {loc} contains both groups and datasets. Only datasets will be imported.')
+        # elif (not has_group) and (not has_dataset):
+        #     raise ValueError(f'File {loc} contains neither groups nor datasets.')
+        #
+        # if has_dataset:
+        #     return import_datasets(file, dependent)
+        # else:
+        #     warnings.warn(f'File {loc} contains groups. Only datasets will be imported.')
+        #     results = []
+        #     for group in file.keys():
+        #         for thing in file[group].keys():
+        #             if isinstance(file[group][thing], h5py.Group):
+        #                 raise NotImplementedError('Nested groups are not implemented.')
+        #         results.append(import_datasets(file[group], dependent))
+        #     return results
 
 
 def import_datasets(h5py_file, variable_name):
