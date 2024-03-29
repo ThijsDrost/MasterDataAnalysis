@@ -1,3 +1,7 @@
+"""
+This submodule contains the `moving_average` and `block_averages` functions for averaging numpy arrays.
+"""
+
 import numpy as np
 
 

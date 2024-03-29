@@ -1,4 +1,4 @@
-from General.Analysis import Analyzer, Models
+from General.Analysis import CalibrationAnalyzer, Models
 from General.Data_handling import drive_letter, InterpolationDataSet, import_hdf5
 
 class LinesModel:

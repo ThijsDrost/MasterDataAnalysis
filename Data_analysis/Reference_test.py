@@ -3,11 +3,11 @@ import numpy as np
 
 from General.Data_handling import drive_letter, SpectroData
 
-base_loc = rf'{drive_letter()}:\OneDrive - TU Eindhoven\Master thesis\Measurements\24_01_25 NO2- Conc'
+base_loc = rf'{drive_letter()}:\OneDrive - TU Eindhoven\Master thesis\Measurements\24_01_25 NO2- pH'
 
-spectrometer = '2112120U1'  # '2112120U1' or '2203047U1'
+spectrometer = '2203047U1'  # '2112120U1' or '2203047U1'
 
-file_locs = [rf'{base_loc}\{i}_{spectrometer}.TXT' for i in range(10)]
+file_locs = [rf'{base_loc}\{i}_{spectrometer}.TXT' for i in range(1, 10)]
 refs_loc = [rf'{base_loc}\Reference{i}_{spectrometer}.TXT' for i in range(1, 3)]
 dark_loc = rf'{base_loc}\Dark_{spectrometer}.TXT'
 
@@ -26,7 +26,7 @@ for j, ref in enumerate(refs):
         absorbance = -np.log10((data - dark) / (ref - dark))
         plt.plot(wavelength[mask], absorbance[mask], label=i)
     plt.xlim(*x_lim)
-    plt.ylim(0, 0.1)
+    # plt.ylim(0, 0.1)
     plt.xlabel('Wavelength (nm)')
     plt.ylabel('Absorbance')
     plt.legend()

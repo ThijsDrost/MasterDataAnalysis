@@ -5,7 +5,7 @@ import tkinter.messagebox as tk_messagebox
 import numpy as np
 import h5py
 
-from General.Data_handling.Data_import import SpectroData
+from General.Data_handling import SpectroData
 from GUIs.Widgets.SpectraPlot import SpectraPlot
 from GUIs.Widgets.AbsorptionFitPlot import AbsorptionFitPlot
 from General.Analysis.Models import multi_species_model

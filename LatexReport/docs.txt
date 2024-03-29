@@ -1,0 +1,4 @@
+"""
+This package is used to automate some of the latex generation for my thesis (where you may be reading this).
+It is mostly meant to generate the documentation of the code and some tables.
+"""
