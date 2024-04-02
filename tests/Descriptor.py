@@ -1,6 +1,7 @@
 from dataclasses import dataclass
+import inspect
 
-from General.Descriptors import Float, Literal, Positive, Integer, Default
+from General.Descriptors import Float, Literal, Positive, Integer, Default, SmallerThan
 
 
 @dataclass
@@ -22,11 +23,13 @@ class Data:
         A literal attribute
     """
     a: int = Integer()
-    x: float = Float() + Positive()
-    y: float = Float() + Literal([1.0, 2.0, 3.0])
+    x: float = Float() + Positive() + SmallerThan(-10.0)
+    y: float = Float() + Literal((1.0, 2.0, 3.0))
     z: int = Integer() + Default(4)
-    literal: str = Default('c') + Literal(['a', 'b', 'c']) + Literal(['a', 'c'])
+    literal: str = Default('c') + Literal(('a', 'b', 'c')) + Literal(('a', 'c'))
 
 
-data = Data(1, 2.3, 2.0)
-data.z
+data = Data(1, -2.3, 3.0)
+print(data.z)
+
+print(inspect.signature(Data))
