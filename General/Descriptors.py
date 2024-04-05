@@ -54,15 +54,14 @@ class Descriptor:
         self._types = types
         self._converter = converter
         self._validators = validators
-        self.name = 'Default'
-        self._update()
 
     def _update(self):
         if self._number_line is not NoValue:
             if not self._number_line:
                 raise ValueError(f'Number line is empty')
         if self._literals is not NoValue:
-            self._literals = tuple(set(self._literals))
+            # To keep the order of the literals, we need to do it this way instead of using a set
+            self._literals = tuple((self._literals[i] for i in range(len(self._literals)) if self._literals[i] not in self._literals[:i]))
             if not self._literals:
                 raise ValueError(f'Literals are empty')
         if self._types is not NoValue:
@@ -71,10 +70,17 @@ class Descriptor:
                 raise ValueError(f'Types are empty')
 
             if self._literals is not NoValue:
+                old_len = len(self._literals)
                 self._literals = tuple((l for l in self._literals if isinstance(l, self._types)))
                 if not self._literals:
                     raise ValueError(f'No literals are of the required type')
+                if len(self._literals) != old_len:
+                    warnings.warn('Some literals are not of the required type, they are removed from `literals`')
+
+                old_len = len(self._types)
                 self._types = tuple((t for t in self._types if any(isinstance(l, t) for l in self._literals)))
+                if old_len != len(self._types):
+                    warnings.warn('Some types are not present in `literals`, they are removed from `types`')
 
             if self._number_line is not NoValue:
                 if (int not in self._types) and (float not in self._types):
@@ -82,11 +88,19 @@ class Descriptor:
                     warnings.warn('number_line` is not used because `types` does not contain `int` or `float`')
 
     def __set_name__(self, owner, name):
+        # Checking is done here, since this is called when all the descriptors are added together
+        self.name = f'Default value for `{name}`'  # Set the name to default, so that the error message is more informative
+        if self._default is not NoValue:
+            self._validate(self._default)
+        self._update()
+
         self.owner = owner
         self.name = name
         self.private_name = f'_{name}'
 
     def __get__(self, instance, owner):
+        if instance is None:
+            return self
         if self._default is not NoValue:
             return getattr(instance, self.private_name, self._default)
         return getattr(instance, self.private_name)
@@ -138,23 +152,37 @@ class Descriptor:
                 result = a
             return result
 
-        def sub_nlt(a, b, name):
+        def sub_n(a, b):
+            if a is NoValue:
+                if b is NoValue:
+                    return NoValue
+                else:
+                    warnings.warn(f'Trying to remove number line from a descriptor that does not have a number line, assuming'
+                                  f'that the number line is {NumberLine()}')
+                    a = NumberLine()
+            if b is NoValue:
+                return a
+            return a - b
+
+        def sub_lt(a, b, name):
             if a is not NoValue:
                 if b is not NoValue:
-                    result = a - b
+                    result = tuple((l for l in a if l not in b))
                 else:
                     result = a
-            else:
+            elif b is not NoValue:
                 raise ValueError(f'Cannot remove {name} from a descriptor that does not have a {name}')
+            else:
+                result = NoValue
             return result
 
         default = sub_dc(self._default, other._default, 'default value')
         converter = sub_dc(self._converter, other._converter, 'converter')
         validators = sub_dc(self._validators, other._validators, 'validators')
 
-        number_line = sub_nlt(self._number_line, other._number_line, 'number line')
-        literals = tuple(sub_nlt(set(self._literals), set(other._literals), 'literals'))
-        types = tuple(sub_nlt(set(self._types), set(other._types), 'types'))
+        number_line = sub_n(self._number_line, other._number_line)
+        literals = sub_lt(self._literals, other._literals, 'literals')
+        types = sub_lt(self._types, other._types, 'types')
 
         for vals, name in ((number_line, 'number lines'), (literals, 'literals'), (types, 'types')):
             if vals is not NoValue:
@@ -170,17 +198,17 @@ class Descriptor:
                 if isinstance(value, t):
                     break
             else:
-                raise ValueError(f'{self.name} must be of type {self._types}')
+                raise ValueError(f'{self.name} ({value}) must be one of the following types: {self._tuple_str([t.__name__ for t in self._types])}')
 
     def _check_literal(self, value):
         if self._literals is not NoValue:
             if value not in self._literals:
-                raise ValueError(f'{self.name} must be one of {self._literals}')
+                raise ValueError(f'{self.name} ({value}) must be one of the following: {self._tuple_str(self._literals)}')
 
     def _check_number_line(self, value):
         if self._number_line is not NoValue:
             if value not in self._number_line:
-                raise ValueError(f'{self.name} must be in {self._number_line}')
+                raise ValueError(f'{self.name} ({value}) must be in {self._number_line}')
 
     def _check_validators(self, value):
         if self._validators is not NoValue:
@@ -188,17 +216,23 @@ class Descriptor:
                 validator(value, self.name)
 
     def _validate(self, value):
-        try:
-            self._check_type(value)
-            self._check_literal(value)
-            self._check_number_line(value)
-            self._check_validators(value)
-        except Exception as e:
-            if self.name != 'Default':
-                raise e
-            else:
-                raise ValueError(f'Default value is invalid') from e
+        if isinstance(value, Descriptor):
+            return
+        self._check_type(value)
+        self._check_literal(value)
+        self._check_number_line(value)
+        self._check_validators(value)
 
+    @staticmethod
+    def _tuple_str(values):
+        if len(values) == 1:
+            return f'({values[0]},)'
+        return f'({", ".join(str(v) for v in values)})'
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}(Default={self._default}, NumberLine={self._number_line}, ' \
+               f'Literals={self._literals}, Types={self._types}, Converter={self._converter}, ' \
+               f'Validators={self._validators})'
 
 class BiggerThan(Descriptor):
     def __init__(self, value, inclusive=False):
@@ -209,6 +243,12 @@ class BiggerThan(Descriptor):
 class SmallerThan(Descriptor):
     def __init__(self, value, inclusive=False):
         number_line = NumberLine.smaller_than_float(value, inclusive)
+        super().__init__(number_line=number_line)
+
+
+class AnyNumber(Descriptor):
+    def __init__(self):
+        number_line = NumberLine()
         super().__init__(number_line=number_line)
 
 

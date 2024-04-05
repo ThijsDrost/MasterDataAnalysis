@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import inspect
 
-from General.Descriptors import Float, Literal, Positive, Integer, Default, SmallerThan
+from General.Descriptors import Float, Literal, Positive, Integer, Default, SmallerThan, BiggerThan, NoValue, AnyNumber
 
 
 @dataclass
@@ -23,13 +23,28 @@ class Data:
         A literal attribute
     """
     a: int = Integer()
-    x: float = Float() + Positive() + SmallerThan(-10.0)
+    x: float = Positive() - BiggerThan(10.0)
     y: float = Float() + Literal((1.0, 2.0, 3.0))
-    z: int = Integer() + Default(4)
-    literal: str = Default('c') + Literal(('a', 'b', 'c')) + Literal(('a', 'c'))
+    z: int = Integer() + Default(-2) + AnyNumber() - Positive()
+    literal: str = Default('c') + Literal(('a', 'b', 'c')) + Literal(('c', 'd', 'e'))
 
 
-data = Data(1, -2.3, 3.0)
+class Testerino:
+    value = Integer() + Positive() + SmallerThan(10)
+
+    def __init__(self, value):
+        self.value = value
+
+    def printerion(self):
+        print(self.value)
+
+
+data = Data(1, 8., 3.0)
 print(data.z)
+print(data.literal)
 
-print(inspect.signature(Data))
+
+value = Testerino.value
+tester = Testerino(5)
+tester.printerion()
+
