@@ -1,6 +1,6 @@
-from General.Analysis import CalibrationAnalyzer
-from General.Data_handling import drive_letter
-from General.Plotting import Names
+from General.experiments.absorption import CalibrationAnalyzer
+from General.import_funcs import drive_letter
+from General.plotting import Names
 
 save_loc = rf'{drive_letter()}:\OneDrive - TU Eindhoven\Master thesis\Tex\Images\Results\Calibrations'
 

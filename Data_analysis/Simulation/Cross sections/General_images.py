@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from General.Data_handling import CrossSectionData, plot_CrossSections, plot_spread
-from General.Plotting import Plot
+from General.simulation.CrossSections import CrossSectionData, plot_CrossSections
+from General.plotting import linestyles
 
 image_loc = r'E:\OneDrive - TU Eindhoven\Master thesis\Tex\Images\Simulations\Cross sections'
 loc = r"E:\OneDrive - TU Eindhoven\Master thesis\Cross sections\Ar_elastic.txt"
@@ -12,7 +12,7 @@ bigger = data.select_by_values(x_range=(0.2, 0.3), y_range=(2.5e-21, None))
 selected = data.select_by_values(x_range=(0.2, 0.3), y_range=(None, 2.5e-21))
 
 names = [dat.database_simplified for dat in data]
-line_kwargs = {name: look for (name, look) in zip(names, Plot.linelook_by(names, markers=True, colors=True))}
+line_kwargs = {name: look for (name, look) in zip(names, linestyles.linelook_by(names, markers=True, colors=True))}
 
 line_kwargs_iter = [line_kwargs[dat.database_simplified] for dat in selected]
 plot_CrossSections(selected, show=True, plot_kwargs={'ylim': 1e-22, 'xlim': (1e-3, 1e4)}, rotate_markers=True, legend_kwargs=None,

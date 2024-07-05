@@ -3,7 +3,7 @@ import warnings
 import shutil
 
 spectrometers = ('2203047U1', )
-loc = rf'E:\OneDrive - TU Eindhoven\Master thesis\Measurements\24_01_25 NO2- Conc'
+loc = r'E:\OneDrive - TU Eindhoven\Master thesis\Measurements\24_01_25 NO2- Conc'
 
 # %%
 folders = [d for d in os.scandir(loc) if (d.is_dir() and (not any(s in d.name for s in spectrometers)))]

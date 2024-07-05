@@ -1,4 +1,4 @@
-from General.Data_handling.CrossSections import CrossSectionCollection
+from General.simulation.CrossSections import CrossSectionCollection
 
 loc = r"C:\Users\20222772\Downloads\Argon.txt"
 cross_sections = CrossSectionCollection.read_txt(loc)

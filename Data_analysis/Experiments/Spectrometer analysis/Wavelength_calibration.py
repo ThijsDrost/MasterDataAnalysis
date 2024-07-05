@@ -2,8 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import lmfit
 
-from General.Data_handling import drive_letter, SpectroData
-from General.Analysis import WavelengthCalibration
+from General.import_funcs import drive_letter
+from General.experiments import WavelengthCalibration, SpectroData
 
 plt.rcParams.update({'font.size': 14})
 
@@ -13,16 +13,16 @@ dark = SpectroData.read_data(rf'{loc}\Dark.txt')
 data2 = SpectroData.read_data(rf'{loc}\Hg-Ar lamp 2.txt')
 dark2 = SpectroData.read_data(rf'{loc}\Dark 2.txt')
 
-peaks, wavs = WavelengthCalibration.wavelength_calibration3(data.wavelength, data.intensity - dark.intensity, min_intensity=1)
-peaks2, wavs2 = WavelengthCalibration.wavelength_calibration3(data2.wavelength, data2.intensity - dark2.intensity)
+peaks, wavs = WavelengthCalibration.wavelength_calibration3(data.spectrum.wavelengths, data.spectrum.intensities - dark.spectrum.intensities, min_intensity=1)
+peaks2, wavs2 = WavelengthCalibration.wavelength_calibration3(data2.spectrum.wavelengths, data2.spectrum.intensities - dark2.spectrum.intensities)
 
-wav_range = data.wavelength[0], data.wavelength[-1]
+wav_range = data.spectrum.wavelengths[0], data.spectrum.wavelengths[-1]
 wav_delta = wav_range[1] - wav_range[0]
-wav_range2 = data2.wavelength[0], data2.wavelength[-1]
+wav_range2 = data2.spectrum.wavelengths[0], data2.spectrum.wavelengths[-1]
 wav_delta2 = wav_range2[1] - wav_range2[0]
 
-print(f'Pixel size 1: {np.diff(data.wavelength).min():.3f} to {np.diff(data.wavelength).max():.3f} nm, '
-      f'2: {np.diff(data2.wavelength).min():.3f} to {np.diff(data2.wavelength).max():.3f} nm')
+print(f'Pixel size 1: {np.diff(data.spectrum.wavelengths).min():.3f} to {np.diff(data.spectrum.wavelengths).max():.3f} nm, '
+      f'2: {np.diff(data2.spectrum.wavelengths).min():.3f} to {np.diff(data2.spectrum.wavelengths).max():.3f} nm')
 
 # %%
 plt.figure()
@@ -73,6 +73,7 @@ def model(wavs, peaks, save_name=None):
     error_wavs = np.linspace(*plot_range, 100)
     error_values = error(error_wavs-middle_wav, result.params['a'].stderr, result.params['b'].stderr, result.params['c'].stderr, 0.0)
     best_values = model.eval(result.params, x=error_wavs-middle_wav)
+    print(result.fit_report())
     plt.figure()
     data = plt.errorbar(peaks, wavs - peaks, yerr=0.016, fmt='oC0', capsize=2)
     line = plt.plot(error_wavs, best_values, '-C1')
@@ -108,7 +109,7 @@ plt.show()
 
 # %%
 plt.figure()
-plt.plot(data2.wavelength, data2.intensity - dark2.intensity, 'C1')
+plt.plot(data2.spectrum.wavelengths, data2.spectrum.intensities - dark2.spectrum.intensities, 'C1')
 plt.grid()
 plt.xlabel('Wavelength [nm]')
 plt.ylabel('Intensity')
@@ -120,8 +121,8 @@ plt.savefig(rf'{drive_letter()}:\OneDrive - TU Eindhoven\Master thesis\Tex\Image
 plt.show()
 
 # %%
-wavelength = data.wavelength
-intensity = data.intensity - dark.intensity
+wavelength = data.spectrum.wavelengths
+intensity = data.spectrum.intensities - dark.spectrum.intensities
 for start_wavelength in (200, 300, 400, 500, 600, 700, 800, 900):
     plt.figure()
     mask = (wavelength > start_wavelength) & (wavelength < start_wavelength + 100)
@@ -136,7 +137,7 @@ for start_wavelength in (200, 300, 400, 500, 600, 700, 800, 900):
     plt.show()
 
 # %%
-wavelength, intensity = data2.wavelength, data2.intensity - dark2.intensity
+wavelength, intensity = data2.spectrum.wavelengths, data2.spectrum.intensities - dark2.spectrum.intensities
 
 wav_range = (395, 400)
 mask = (wavelength > wav_range[0]) & (wavelength < wav_range[1])

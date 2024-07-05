@@ -3,22 +3,21 @@ from sympy.solvers import solve
 
 x_1, x_2, x_3 = sympy.symbols(r'\lambda_1 \lambda_2 \lambda_3')
 y_1, y_2, y_3 = sympy.symbols('I_1 I_2 I_3')
-# x_1, x_2, x_3 = sympy.symbols(r'x_1 x_2 x_3')
-# y_1, y_2, y_3 = sympy.symbols('y_1 y_2 y_3')
 a, b, c = sympy.symbols('a b c')
 
 # %% Center location
 result = solve([a*x_1**2 + b*x_1 + c - y_1, a*x_2**2 + b*x_2 + c - y_2, a*x_3**2 + b*x_3 + c - y_3], a, b, c)
-print(result[a])
-print(result[b])
-print(result[c])
 
 peak = -result[b] / (2*result[a])
 peak = peak.collect((x_1, x_2, x_3))
-print(peak)
-print(sympy.latex(peak))
+intensity = result[a]*peak**2 + result[b]*peak + result[c]
+intensity = intensity.collect((x_1, x_2, x_3))
 print('a=', sympy.latex(result[a].collect((x_1, x_2, x_3))))
 print('b=', sympy.latex(result[b].collect((x_1, x_2, x_3))))
+print('c=', sympy.latex(result[c].collect((x_1, x_2, x_3))))
+
+print(r'\lambda_t=', sympy.latex(peak))
+print('I_t=', sympy.latex(intensity))
 
 # %% Peak width
 e = sympy.symbols('e')

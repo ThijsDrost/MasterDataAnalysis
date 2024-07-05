@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm, SymLogNorm
 
-from General.Analysis import WavelengthCalibration
-from General.Data_handling import drive_letter
+from General.experiments import WavelengthCalibration
+from General.import_funcs import drive_letter
 
 plt.rcParams.update({'font.size': 14})
 

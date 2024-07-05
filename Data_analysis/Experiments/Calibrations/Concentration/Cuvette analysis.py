@@ -1,8 +1,7 @@
-import matplotlib.pyplot as plt
 
-from General.Analysis import CalibrationAnalyzer
-from General.Data_handling import drive_letter
-from General.Plotting import Names
+from General.experiments.absorption import CalibrationAnalyzer
+from General.import_funcs import drive_letter
+from General.plotting import Names
 
 save_loc = rf'{drive_letter()}:\OneDrive - TU Eindhoven\Master thesis\Tex\Images\Results\Calibrations'
 
@@ -19,19 +18,17 @@ NO2_analyzer.absorbance_vs_wavelength_with_variable(show=True, plot_kwargs={'xli
 NO3_analyzer.absorbance_vs_wavelength_with_variable(show=True, plot_kwargs={'xlim': (200, 300)}, relative=True, save_loc=save_loc, save_suffix='_NO3_concentration_cuvette_200-300.pdf')
 H2O2_analyzer.absorbance_vs_wavelength_with_variable(show=True, plot_kwargs={'xlim': (200, 300)}, relative=True, save_loc=save_loc, save_suffix='_H2O2_concentration_cuvette_200-300.pdf')
 
-NO2_analyzer.absorbance_vs_wavelength_with_variable(show=True, plot_kwargs={'xlim': (300, 400)}, save_loc=save_loc, save_suffix='_NO2_concentration_cuvette_300-400.pdf')
-NO3_analyzer.absorbance_vs_wavelength_with_variable(show=True, plot_kwargs={'xlim': (300, 400)}, save_loc=save_loc, save_suffix='_NO3_concentration_cuvette_300-400.pdf')
-H2O2_analyzer.absorbance_vs_wavelength_with_variable(show=True, plot_kwargs={'xlim': (300, 400)}, save_loc=save_loc, save_suffix='_H2O2_concentration_cuvette_300-400.pdf')
+NO2_analyzer.absorbance_vs_wavelength_with_variable(show=True, plot_kwargs={'xlim': (200, 400)}, save_loc=save_loc, save_suffix='_NO2_concentration_cuvette_200-400.pdf')
+NO3_analyzer.absorbance_vs_wavelength_with_variable(show=True, plot_kwargs={'xlim': (200, 400)}, save_loc=save_loc, save_suffix='_NO3_concentration_cuvette_200-400.pdf')
+H2O2_analyzer.absorbance_vs_wavelength_with_variable(show=True, plot_kwargs={'xlim': (200, 400)}, save_loc=save_loc, save_suffix='_H2O2_concentration_cuvette_200-400.pdf')
 
 fig_ax = NO2_analyzer.pearson_r_vs_wavelength(close=False, show=False, labels=(Names.NO2,), colors=('C0',))
 NO3_analyzer.pearson_r_vs_wavelength(close=False, show=False, fig_ax=fig_ax, labels=(Names.NO3,), colors=('C1',))
 H2O2_analyzer.pearson_r_vs_wavelength(show=True, plot_kwargs={'xlim': (200, 300), 'ylim': (0.99, 1)}, close=False, fig_ax=fig_ax, labels=(Names.H2O2,),
                                       legend_kwargs={'title': 'Specie'}, colors=('C2',), save_loc=save_loc, save_suffix='_pearson_r_cuvette.png')
 
-fig_ax = NO2_analyzer.one_minus_pearson_r_vs_wavelength(close=False, show=False, labels=(Names.NO2,), colors=('C0',))
-NO3_analyzer.one_minus_pearson_r_vs_wavelength(close=False, show=False, fig_ax=fig_ax, labels=(Names.NO3,), colors=('C1',))
-H2O2_analyzer.one_minus_pearson_r_vs_wavelength(show=True, plot_kwargs={'xlim': (200, 300), 'ylim': (1e-10, 1), 'yscale': 'log'}, close=False, fig_ax=fig_ax,
+fig_ax = NO2_analyzer.one_minus_pearson_r_vs_wavelength(add_zero=True, close=False, show=False, labels=(Names.NO2,), colors=('C0',))
+NO3_analyzer.one_minus_pearson_r_vs_wavelength(add_zero=True, close=False, show=False, fig_ax=fig_ax, labels=(Names.NO3,), colors=('C1',))
+H2O2_analyzer.one_minus_pearson_r_vs_wavelength(add_zero=True, show=True, plot_kwargs={'xlim': (200, 400), 'yscale': 'log'}, close=False, fig_ax=fig_ax,
                                                 labels=(Names.H2O2,), legend_kwargs={'title': 'Specie'}, colors=('C2',), save_loc=save_loc,
-                                                save_suffix='_one_minus_pearson_r_cuvette.png')
-
-
+                                                save_suffix='_one_minus_pearson_r_cuvette.pdf')

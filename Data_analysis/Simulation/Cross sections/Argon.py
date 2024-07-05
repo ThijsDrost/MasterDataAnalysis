@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 
-from General.Data_handling import CrossSectionData, plot_CrossSections, plot_averageCrossSections
-from General.Plotting import Plot
+from General.simulation.CrossSections import CrossSectionData, plot_CrossSections, plot_averageCrossSections
+from General.plotting import linestyles
 
 image_loc = r'E:\OneDrive - TU Eindhoven\Master thesis\Tex\Images\Simulations\Cross sections'
 
@@ -10,7 +10,7 @@ data = CrossSectionData.read_txt(loc)
 plot_CrossSections(data, show=True, plot_kwargs={'ylim': 1e-23}, line_kwargs={'marker': '.', 'linestyle': '-'})
 selected = data.select_by_name(starts_with='TRINITI', inverted=True)
 
-line_kwargs_iter = Plot.linelook_by([dat.database_simplified for dat in selected], linestyles=False, colors=True)
+line_kwargs_iter = linestyles.linelook_by([dat.database_simplified for dat in selected], linestyles=False, colors=True)
 plot_CrossSections(selected, show=True, plot_kwargs={'ylim': 1e-23}, line_kwargs_iter=line_kwargs_iter)
 
 plot_averageCrossSections(selected, show=True, plot_kwargs={'ylim': (1e-21, 1e-20), 'xlim': (1e3, 1e4)})

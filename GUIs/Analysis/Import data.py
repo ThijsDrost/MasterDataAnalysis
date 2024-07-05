@@ -2,11 +2,9 @@ import tkinter as tk
 from tkinter import filedialog
 
 import numpy as np
-import h5py
 
-from General.Data_handling import SpectroData
-from GUIs.Widgets.SpectraPlot import SpectraPlot
-from GUIs.Widgets.AbsorptionFitPlot import AbsorptionFitPlot
+from General.experiments import SpectroData
+from GUIs.widgets.SpectraPlot import SpectraPlot
 
 root = tk.Tk()
 root.title('Spectrometer')
@@ -69,7 +67,7 @@ def absorbance(data: SpectroData, references: list[SpectroData] = None, dark: Sp
 
 def weights(data: SpectroData, values: list[SpectroData], method='closest'):
     if method not in ('closest', 'interpolate', 'before', 'after'):
-        raise ValueError(f'`method` should be one of: closest, interpolate, before, after')
+        raise ValueError('`method` should be one of: closest, interpolate, before, after')
     measure_time = data.time_ms
     reference_times = [ref.time_ms for ref in values]
     weights = [0 for _ in values]

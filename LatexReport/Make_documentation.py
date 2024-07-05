@@ -3,7 +3,7 @@ The file used to create the appendix with documentation your currently reading. 
 the project and puts them in a latex files. These files are combined to create the appendix.
 """
 
-from General.Latex.Docs import write_simple_latex_docs, find_folder_num, find_file_num, calc_code_lines
+from General.latex.Docs import write_simple_latex_docs, find_folder_num, find_file_num, calc_code_lines
 
 
 base_loc_out = r"E:\OneDrive - TU Eindhoven\Master thesis\Tex\Appendices"
@@ -11,7 +11,7 @@ base_loc_in = r'C:\Users\20222772\PycharmProjects\MasterDataAnalysis'
 write_simple_latex_docs(rf"{base_loc_in}\Data_analysis", fr'{base_loc_out}\Code\code_doc_Data_analysis.tex')
 write_simple_latex_docs(fr"{base_loc_in}\General", fr'{base_loc_out}\Code\code_doc_General.tex')
 write_simple_latex_docs(fr"{base_loc_in}\Guis", fr'{base_loc_out}\Code\code_doc_Guis.tex')
-write_simple_latex_docs(fr"{base_loc_in}\Latex", fr'{base_loc_out}\Code\code_doc_Latex.tex')
+write_simple_latex_docs(fr"{base_loc_in}\LatexReport", fr'{base_loc_out}\Code\code_doc_Latex.tex')
 folders = find_folder_num(f"{base_loc_in}")
 files = find_file_num(f"{base_loc_in}")
 lines = calc_code_lines(f"{base_loc_in}")

@@ -1,4 +1,4 @@
-from General.Simulation._BolsigMinus import BolsigMinus
+from General.simulation.bolsig._bolsig_minus import BolsigMinus
 
 loc = r"E:\OneDrive - TU Eindhoven\Master thesis\Bolsig+\bolsigminus.exe"
 cross_sections = r"E:\OneDrive - TU Eindhoven\Master thesis\Cross sections"

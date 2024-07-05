@@ -3,8 +3,8 @@ import numpy as np
 from scipy.stats import pearsonr, linregress, ttest_ind
 import lmfit
 
-from General.Data_handling import drive_letter, SpectroData
-from General.Analysis import WavelengthCalibration
+from General.import_funcs import drive_letter
+from General.experiments import SpectroData, WavelengthCalibration
 
 
 def main():
@@ -16,9 +16,9 @@ def main():
     for index, (data_loc, dark_loc) in enumerate(zip(data_locs, dark_locs), start=1):
         data = SpectroData.read_data(rf'{loc}\{data_loc}')
         dark = SpectroData.read_data(rf'{loc}\{dark_loc}')
-        peaks, wavs = WavelengthCalibration.wavelength_calibration3(data.wavelength, data.intensity - dark.intensity)
-        print(f'Pixel size: {np.diff(data.wavelength).min():.3f} to {np.diff(data.wavelength).max():.3f} nm')
-        peak_shape(data.wavelength, data.intensity - dark.intensity, wavs, 2.0, min_rel_height=0.9,
+        peaks, wavs = WavelengthCalibration.wavelength_calibration3(data.spectrum.wavelengths, data.spectrum.intensities - dark.spectrum.intensities)
+        print(f'Pixel size: {np.diff(data.spectrum.wavelengths).min():.3f} to {np.diff(data.spectrum.wavelengths).max():.3f} nm')
+        peak_shape(data.spectrum.wavelengths, data.spectrum.intensities - dark.spectrum.intensities, wavs, 2.0, min_rel_height=0.9,
                    save_name=f'{drive_letter()}:\\OneDrive - TU Eindhoven\\Master thesis\\Tex\\Images\\Appendices\\spec{index}_')
 
 

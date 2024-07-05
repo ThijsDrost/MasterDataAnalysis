@@ -1,4 +1,4 @@
-from General.Data_handling import CrossSectionData, plot_CrossSections
+from General.simulation.CrossSections import CrossSectionData, plot_CrossSections
 
 loc = r"E:\OneDrive - TU Eindhoven\Master thesis\Cross sections\O2+e_O2++2e.txt"
 data = CrossSectionData.read_txt(loc)

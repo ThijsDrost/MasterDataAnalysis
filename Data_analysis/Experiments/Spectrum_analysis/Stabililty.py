@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from General.Data_handling import drive_letter, import_hdf5
+from General.import_funcs import drive_letter
+from General.experiments.absorption.DataSets import import_hdf5
 
 base_loc = rf'{drive_letter()}:\OneDrive - TU Eindhoven\Master thesis\Measurements\24_02_16\Stability'
 spectrometers = ('2112120U1', '2203047U1')

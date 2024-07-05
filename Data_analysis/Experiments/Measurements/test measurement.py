@@ -3,7 +3,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-from General.Data_handling import SpectroData
+from General.experiments import SpectroData
 
 loc = r'E:\OneDrive - TU Eindhoven\Master thesis\Measurements\24_02_16\Argon'
 

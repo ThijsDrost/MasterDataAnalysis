@@ -1,5 +1,5 @@
-from General.Data_handling.ComsolAnalyzer import ComsolAnalyzer
-from General.Data_handling.Bolsig_plus import BolsigRuns
+from General.simulation.comsol.ComsolAnalyzer import ComsolAnalyzer
+from General.simulation.bolsig.Bolsig_plus import BolsigRuns
 
 loc_comsol = r"C:\Users\20222772\Downloads\Output1.txt"
 loc_bolsig = r"C:\Users\20222772\Downloads\output.dat"

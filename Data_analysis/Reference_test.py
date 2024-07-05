@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from General.Data_handling import drive_letter, SpectroData
+from General.import_funcs import drive_letter
+from General.experiments import SpectroData
 
 base_loc = rf'{drive_letter()}:\OneDrive - TU Eindhoven\Master thesis\Measurements\24_01_25 NO2- pH'
 

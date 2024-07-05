@@ -1,9 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from General.Analysis import CalibrationAnalyzer, pH
-from General.Analysis.pH_analysis import pH_concentration, theoretical_ratio
-from General.Data_handling import drive_letter
+from General.experiments.absorption import CalibrationAnalyzer, pH
+from General.experiments.absorption.pH_analysis import theoretical_ratio
+from General.import_funcs import drive_letter
 
 save_loc = rf'{drive_letter()}:\OneDrive - TU Eindhoven\Master thesis\Tex\Images\Results\Calibrations'
 base_loc = rf'{drive_letter()}:\OneDrive - TU Eindhoven\Master thesis\Measurements'

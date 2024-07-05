@@ -2,7 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import lmfit
 
-from General.Data_handling import import_hdf5, drive_letter
+from General.experiments.absorption.DataSets import import_hdf5
+from General.import_funcs import drive_letter
 
 dependent = 'H2O2'
 loc = rf'{drive_letter()}:\OneDrive - TU Eindhoven\Master thesis\Measurements\Calibration\H2O2 cuvette\data.hdf5'

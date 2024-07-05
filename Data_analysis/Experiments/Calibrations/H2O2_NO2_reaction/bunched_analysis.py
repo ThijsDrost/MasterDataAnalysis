@@ -1,10 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from General.Analysis import CalibrationAnalyzer, Models
-from General.Data_handling import drive_letter, InterpolationDataSet, import_hdf5, DataSet
-from General.Data_handling.Import import SimpleDataSet
-from General.Numpy_funcs import moving_average, block_averages
+from General.experiments.absorption import CalibrationAnalyzer
+from General.experiments.absorption import Models
+from General.experiments.absorption.DataSets import InterpolationDataSet, import_hdf5, DataSet, SimpleDataSet
+from General.import_funcs import drive_letter
+from General.numpy_funcs import block_average
 
 # %%
 line_width = 2  # nm
@@ -43,7 +44,7 @@ for j in range(len(data)):
     dat = data[j]
     fit_data = DataSet.from_simple(dat)
     wavelength = fit_data.get_wavelength(False)
-    bunched_data = block_averages(fit_data.get_absorbances(masked=False), bunch_size)
+    bunched_data = block_average(fit_data.get_absorbances(masked=False), bunch_size)
 
     conc_lines = np.zeros((len(bunched_data), 3))
     conc_std_lines = np.zeros((len(bunched_data), 3))
@@ -66,7 +67,7 @@ for j in range(len(data)):
         conc_spectra[i] = [result.params['H2O2_conc'].value, result.params['NO3_conc'].value, result.params['NO2_conc'].value]
         conc_std_spectra[i] = [result.params['H2O2_conc'].stderr, result.params['NO3_conc'].stderr, result.params['NO2_conc'].stderr]
 
-    bunched_var = block_averages(dat.variable, bunch_size)
+    bunched_var = block_average(dat.variable, bunch_size)
     plt.figure()
     plt.title(j)
     p1 = plt.plot(bunched_var, conc_lines[:, 0], 'C0', label='H2O2')[0]
@@ -102,8 +103,8 @@ ranges1 = [(344, 348), (356, 360), (370, 374), (384, 388)]
 ranges2 = [(350, 354), (363, 367), (377, 381)]
 datas = []
 for i in range(len(data)):
-    avg_inten = block_averages(data[i].absorbances, 25)
-    avg_time = block_averages(data[i].variable, 25)
+    avg_inten = block_average(data[i].absorbances, 25)
+    avg_time = block_average(data[i].variable, 25)
     num = np.full(len(avg_time), 1)
     avg_data = SimpleDataSet(data[i].wavelength, avg_inten, avg_time, num, 'time')
     analyzer = CalibrationAnalyzer.from_DataSet(DataSet.from_simple(avg_data), 1, 'time [s]')

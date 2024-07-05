@@ -1,5 +1,5 @@
-from General.Analysis import CalibrationAnalyzer
-from General.Data_handling import drive_letter
+from General.experiments.absorption import CalibrationAnalyzer
+from General.import_funcs import drive_letter
 
 
 line_width = 2  # nm

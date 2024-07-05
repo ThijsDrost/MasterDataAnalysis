@@ -1,11 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize
 
-from General.Data_handling import drive_letter, SpectroData, import_hdf5
-from General.Analysis import MeasurementsAnalyzer, CalibrationAnalyzer
-from General.Analysis.Models import multi_species_model
-from General.Plotting import Names
+from General.import_funcs import drive_letter
+from General.experiments.absorption import MeasurementsAnalyzer, CalibrationAnalyzer
+from General.experiments.absorption.Models import multi_species_model
+from General.plotting import Names
 
 
 species = ('NO2-', 'NO3-', 'H2O2')

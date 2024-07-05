@@ -2,8 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import lmfit
 
-from General.Data_handling import drive_letter, SpectroData
-from General.Analysis import WavelengthCalibration
+from General.import_funcs import drive_letter
+from General.experiments import WavelengthCalibration
+from General.experiments import SpectroData
 
 plt.rcParams.update({'font.size': 14})
 
