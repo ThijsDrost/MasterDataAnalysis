@@ -159,16 +159,30 @@ class MeasuredWaveforms:
             heights[index] = fit.best_values['amplitude']
         return rise_times, high_times, heights
 
-    def background_current_averaging(self, pulse_length_us, upper_offset=1e-7):
-        avg_time = np.average(self.time, axis=0)
-        avg_curr = np.average(self.currents, axis=0)
+    def background_current_averaging(self, start_offset=1, end_offset=1, block_average=1, on_mask=None):
+        if on_mask is None:
+            on_mask = np.full(self.voltages.shape[0], True)
 
-        upper_bound = avg_time[np.argmin(avg_curr)] - upper_offset
-        lower_bound = upper_bound - 1e-6*pulse_length_us / 3
+        times = self.time[on_mask]
+        currs = self.currents[on_mask]
+
+        avg_time = np.average(times, axis=0)
+        avg_curr = np.average(currs, axis=0)
+
+        start = avg_time[np.argmax(avg_curr)]
+        end = avg_time[np.argmin(avg_curr)]
+        # dt = end - start
+
+        upper_bound = end - end_offset*1e-7
+        lower_bound = start + start_offset*1e-7
+
         mask = (avg_time > lower_bound) & (avg_time < upper_bound)
 
-        avg = np.average(self.currents[:, mask], axis=1)
-        std = np.std(self.currents[:, mask], axis=1)
+        curr = npf.block_average(currs[:, mask], block_average)
+        avg = np.average(curr, axis=1)
+        std = np.std(curr, axis=1)
+        # avg = np.average(self.currents[:, mask], axis=1)
+        # std = np.std(self.currents[:, mask], axis=1)
         return avg, std
 
     @staticmethod
@@ -176,6 +190,7 @@ class MeasuredWaveforms:
         return amplitude * np.exp(-(x - x[0]) / decay) * np.sin((2 * np.pi * x) / length + phase) + offset
 
     def background_current_fitting(self, pulse_length_us, is_on_kwargs=None, save_loc=None, block_average=20):
+        val, _ = self.background_current_averaging()
         model = self._background_current_fitting_model
 
         lmfit_model = lmfit.Model(model)
@@ -192,6 +207,7 @@ class MeasuredWaveforms:
         avg_current = npf.block_average(self.currents[is_on], n)
         avg_time = npf.block_average(self.time[is_on], n)
         avg_offset = npf.block_average(self.time_offset[is_on], n)
+        earlier_values = npf.block_average(val[is_on], n)
         avg_offset = avg_offset - avg_offset[0]
 
         pulse_len = pulse_length_us * 1e-6
@@ -199,9 +215,59 @@ class MeasuredWaveforms:
         back_curr_results = np.zeros_like(avg_offset)
         back_curr_std = np.zeros_like(avg_offset)
 
-        for index, (tim, cur) in enumerate(zip(avg_time, avg_current)):
+        for index, (tim, cur, old) in enumerate(zip(avg_time, avg_current, earlier_values, strict=True)):
+            # params['offset'].value = old
             upper_bound = tim[np.argmin(cur)] - 1e-7
             lower_bound = upper_bound - pulse_len / 3
+            mask = (tim > lower_bound) & (tim < upper_bound)
+            result = lmfit_model.fit(cur[mask], x=tim[mask], params=params)
+
+            if save_loc:
+                t_save_loc = save_loc + f'{index}.pdf'
+                plot_kwargs = {'xlabel': 'Time [s]', 'ylabel': 'Current [A]'}
+                fig_ax = plot.lines(tim[mask], cur[mask], save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=False, close=False)
+                plot.lines(tim[mask], result.best_fit, fig_ax=fig_ax, show=False, close=True, save_loc=t_save_loc)
+            back_curr_results[index] = result.params['offset'].value
+            back_curr_std[index] = result.params['offset'].stderr
+            if (back_curr_std[index] is not None) and back_curr_std[index] > 10:
+                back_curr_results[index] = np.nan
+                back_curr_std[index] = np.nan
+
+            params = result.params
+
+        return avg_offset, back_curr_results, back_curr_std
+
+    def background_current_fitting2(self, pulse_length_us, is_on_kwargs=None, save_loc=None, block_average=20):
+        val, _ = self.background_current_averaging()
+        model = self._background_current_fitting_model
+
+        lmfit_model = lmfit.Model(model)
+        lmfit_model.set_param_hint('amplitude', value=0.25, min=0)
+        lmfit_model.set_param_hint('decay', value=2e-6)
+        lmfit_model.set_param_hint('phase', value=-1.5)
+        lmfit_model.set_param_hint('length', value=1.9e-7)
+        lmfit_model.set_param_hint('offset', value=0.8, min=-100, max=100)
+
+        is_on_kwargs = is_on_kwargs or {}
+        is_on = self.is_on(**is_on_kwargs)
+
+        n = block_average
+        avg_current = npf.block_average(self.currents[is_on], n)
+        tims = self.time[is_on] - self.time[is_on][:, 0][:, None]
+        avg_time = npf.block_average(tims, n)
+        avg_offset = npf.block_average(self.time_offset[is_on], n)
+        earlier_values = npf.block_average(val[is_on], n)
+        avg_offset = avg_offset - avg_offset[0]
+
+        # pulse_len = pulse_length_us * 1e-6
+        params = lmfit_model.make_params()
+        back_curr_results = np.zeros_like(avg_offset)
+        back_curr_std = np.zeros_like(avg_offset)
+
+        for index, (tim, cur, old) in enumerate(zip(avg_time, avg_current, earlier_values, strict=True)):
+            # params['offset'].value = old
+            upper_bound = (0.185 + pulse_length_us)*1e-6
+            lower_bound = 0.4e-6
             mask = (tim > lower_bound) & (tim < upper_bound)
             result = lmfit_model.fit(cur[mask], x=tim[mask], params=params)
 

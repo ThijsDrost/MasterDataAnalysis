@@ -83,8 +83,11 @@ def interpolation_model_2D(x: np.ndarray, y: np.ndarray, values: np.ndarray, *, 
     return model
 
 
-def species_model(database, add_zero=False, **kwargs):
+def species_model(database, add_zero=False, wavelength_bounds=None, **kwargs):
     wavelengths = database.attrs['wavelength']
+    if wavelength_bounds is not None:
+        masks = [(bound1 <= wavelengths) & (wavelengths <= bound2) for bound1, bound2 in zip(wavelength_bounds[:-1], wavelength_bounds[1:])]
+        wavelengths = [wavelengths[mask] for mask in masks]
     intensities = []
     concentrations = []
     for measurement in database:
@@ -92,15 +95,19 @@ def species_model(database, add_zero=False, **kwargs):
         attrs = database[measurement].attrs
         for key in attrs:
             if key.lower() == 'mmol/l':
-                concentrations.append(attrs[key])
+                factor = 1
             elif key.lower() == 'mol/l':
-                concentrations.append(attrs[key]*1_000)
+                factor = 1_000
             elif key.lower() == 'm':
-                concentrations.append(attrs[key]*1_000)
+                factor = 1_000
             elif key.lower() == 'umol/l':
-                concentrations.append(attrs[key]/1_000)
+                factor = 1/1_000
             else:
                 raise ValueError(f'Unknown concentration unit: {key}, should be `mmol/L`, `mol/L`, `M` or `umol/L`')
+            absorbance = attrs[key]
+            if wavelength_bounds is not None:
+                absorbance = [absorbance[mask] for mask in masks]
+            concentrations.append(absorbance*factor)
             conc_name = f'conc_{key.lower().replace('/', '_')}'
     wavelengths = np.array(wavelengths)
     intensities = np.array(intensities).T
@@ -114,7 +121,8 @@ def species_model(database, add_zero=False, **kwargs):
     return interpolation_model_2D(wavelengths, concentrations, intensities, conc_name=conc_name, **kwargs)
 
 
-def multi_species_model(database_loc, add_zero=False, database_path=None, add_constant=False, add_slope=False):
+def multi_species_model(database_loc, add_zero=False, database_path=None, add_constant=False, add_slope=False,
+                        wavelength_bounds=None):
     models = []
     with h5py.File(database_loc) as file:
         if database_path is not None:
@@ -122,7 +130,7 @@ def multi_species_model(database_loc, add_zero=False, database_path=None, add_co
         else:
             calibration_group = file
         for dataset in calibration_group.keys():
-            models.append(species_model(file[dataset], prefix=dataset, add_zero=add_zero))
+            models.append(species_model(file[dataset], prefix=dataset, add_zero=add_zero, wavelength_bounds=wavelength_bounds))
     model = models[0]
     for m in models[1:]:
         model += m

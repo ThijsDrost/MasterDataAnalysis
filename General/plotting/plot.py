@@ -11,6 +11,8 @@ with markers, colors and linestyles based on a list of values, to give each line
 This class is used for (almost) all plots made in this python project.
 """
 
+#bug: If xlim is set to (0, None), matplotlib xlim max is used instead of max of xdata
+
 import warnings
 from collections.abc import Sequence
 import operator
@@ -20,10 +22,9 @@ import matplotlib as mpl
 import numpy as np
 
 from General.plotting.geometry import two_ellipse_tangent, ellipse_inside, Ellipse, Point, LineSegment, Line, Rectangle
-from General.checking import Validator
 
 
-def setting_setter(ax, *, xlabel='', ylabel='', title='', grid=True, xlim=None, ylim=None, xticks=None,
+def setting_setter(ax, *, xlabel='', ylabel='', title='', grid=True, xlim=None, ylim=None, xticks=None, tick_label_size=None,
                    yticks=None, xscale=None, yscale=None, xticklabels=None, yticklabels=None, before=None,
                    fontsize=14, xticks_minor=False, yticks_minor=False, grid_which='major', grid_axis='both'):
     """
@@ -54,13 +55,17 @@ def setting_setter(ax, *, xlabel='', ylabel='', title='', grid=True, xlim=None, 
         if xticks_minor is True:
             ax.minorticks_on()
         if yticks is not None:
-            ax.set_yticks(yticks, yticklabels, yticks_minor)
+            ax.set_yticks(yticks, yticklabels)
         if yticks_minor is True:
             ax.minorticks_on()
+        if tick_label_size is None:
+            tick_label_size = fontsize
+        if tick_label_size is not None:
+            ax.tick_params(axis='both', labelsize=tick_label_size)
         if xlabel is not None:
-            ax.set_xlabel(xlabel)
+            ax.set_xlabel(xlabel, fontsize=fontsize)
         if ylabel is not None:
-            ax.set_ylabel(ylabel)
+            ax.set_ylabel(ylabel, fontsize=fontsize)
         if title is not None:
             ax.set_title(title)
         if grid is not None:
@@ -71,10 +76,6 @@ def setting_setter(ax, *, xlabel='', ylabel='', title='', grid=True, xlim=None, 
             set_lim(ax.set_xlim, xlim)
         if ylim is not None:
             set_lim(ax.set_ylim, ylim)
-        if fontsize is not None:
-            for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
-                         ax.get_xticklabels() + ax.get_yticklabels()):
-                item.set_fontsize(fontsize)
 
 
 def _check_sequence_or_ndarray(value):
@@ -91,7 +92,7 @@ def _check_data(xs, ys):
         if len(xs) == 0:
             return [[]], [[]]
         if _check_sequence_or_ndarray(xs[0]):
-            xs = [np.arange(len(xs[0])) for _ in xs]
+            xs = [np.arange(len(x)) for x in xs]
         else:
             xs = np.arange(len(xs))
 
@@ -121,7 +122,6 @@ def _check_data(xs, ys):
             raise ValueError(f'`xs` and `ys` must have the same length, for line {index}, lengths are `xs`:{len(x)} and `ys`:{len(y)}')
 
     return xs, ys
-
 
 
 def plot_lines(plot_func, xs: np.ndarray | Sequence, ys: np.ndarray | Sequence = None, /, *, colors=None, labels=None,
@@ -184,11 +184,11 @@ def plot_lines(plot_func, xs: np.ndarray | Sequence, ys: np.ndarray | Sequence =
         if len(x) != len(y):
             raise ValueError(f'`xs` and `ys` must have the same length, for line {index}, lengths are `xs`:{len(x)} and `ys`:{len(y)}')
 
-    if line_kwargs_iter is None:
+    if (line_kwargs_iter is None) or (not line_kwargs_iter):
         line_kwargs_iter = [{} for _ in xs]
     else:
         if len(line_kwargs_iter) != len(xs):
-            raise ValueError(f'`line_kwargs_iter` should have the same length as xs, not {len(line_kwargs_iter)} and {len(xs)}')
+            raise ValueError(f'`line_kwargs_iter` should have the same length as the number of lines, not {len(line_kwargs_iter)} and {len(xs)}')
         for i, kwargs in enumerate(line_kwargs_iter):
             if not isinstance(kwargs, dict):
                 raise TypeError(f'`line_kwargs_iter[{i}]` should be a dict, not {type(kwargs)}')
@@ -199,7 +199,8 @@ def plot_lines(plot_func, xs: np.ndarray | Sequence, ys: np.ndarray | Sequence =
     if 'c' in line_kwargs_iter[0]:
         raise ValueError('Use `color` instead of `c` in `line_kwargs_iter`')
 
-    if (colors is None) and ('color' not in line_kwargs_iter[0]):
+    line_kwargs = line_kwargs or {}
+    if (colors is None) and ('color' not in line_kwargs_iter[0]) and ('color' not in line_kwargs):
         offset = 0
         if fig_ax is not None:
             offset = len(fig_ax[1].lines)
@@ -210,11 +211,15 @@ def plot_lines(plot_func, xs: np.ndarray | Sequence, ys: np.ndarray | Sequence =
                           f'repeated.')
 
     if colors is not None:
+        if len(colors) != len(xs):
+            raise ValueError(f'`colors` should have the same length as the number of lines, not {len(colors)} and {len(xs)}')
         for index in range(len(line_kwargs_iter)):
             if 'color' not in line_kwargs_iter[index]:
                 line_kwargs_iter[index]['color'] = colors[index]
 
     if labels is not None:
+        if len(labels) != len(xs):
+            raise ValueError(f'`labels` should have the same length as the number of lines, not {len(labels)} and {len(xs)}')
         for index in range(len(line_kwargs_iter)):
             line_kwargs_iter[index]['label'] = labels[index]
 
@@ -226,8 +231,7 @@ def plot_lines(plot_func, xs: np.ndarray | Sequence, ys: np.ndarray | Sequence =
 
     def add_true_mask(mask: np.ndarray) -> np.ndarray:
         """
-        Add an extra True before the first and after the last True value in the mask. If the first value is True, no extra
-        True value is added, same for the last value.
+        Add a True before and after a sequence of Trues in a mask.
 
         Examples
         --------
@@ -312,7 +316,6 @@ def plot_lines(plot_func, xs: np.ndarray | Sequence, ys: np.ndarray | Sequence =
         plot_kwargs = set_defaults(plot_kwargs, xlim=new_xlim)
     setting_setter(ax, before=True, **plot_kwargs)
 
-    line_kwargs = line_kwargs or {}
     for x, y, kwargs in zip(xs, ys, line_kwargs_iter, strict=True):
         x, y = np.array(x), np.array(y)
 
@@ -332,31 +335,20 @@ def plot_lines(plot_func, xs: np.ndarray | Sequence, ys: np.ndarray | Sequence =
         kwargs = set_defaults(kwargs, **line_kwargs, zorder=3)
         plot_func(x, y, **kwargs)
 
-    setting_setter(ax, before=False, **plot_kwargs)
-
     if (legend_kwargs is not None) or ((labels is not None) and any(labels)):
-        legend_kwargs = set_defaults(legend_kwargs, fontsize=plot_kwargs.get('fontsize', 14))
+        legend_kwargs = set_defaults(legend_kwargs, fontsize=plot_kwargs.get('fontsize', 14), title_fontsize=plot_kwargs.get('fontsize', 14))
         legend = ax.legend(**legend_kwargs)
 
         # If `visible=False` for an entry, assume it's a title.
         # From https://stackoverflow.com/questions/24787041/multiple-titles-in-legend-in-matplotlib
-        for col in legend._legend_handle_box.get_children():
-            row = col.get_children()
-            new_children: list[plt.Artist] = []
-            for hpacker in row:
-                if not isinstance(hpacker, mpl.offsetbox.HPacker):
-                    new_children.append(hpacker)
-                    continue
-                drawing_area, text_area = hpacker.get_children()
-                handle_artists = drawing_area.get_children()
-                if not all(a.get_visible() for a in handle_artists):
-                    new_children.append(text_area)
-                else:
-                    new_children.append(hpacker)
-            col._children = new_children
+        _fix_titles_legend(legend)
 
     if cbar_kwargs is not None:
-        plt.colorbar(**cbar_kwargs, ax=ax)
+        cbar = plt.colorbar(**cbar_kwargs, ax=ax)
+        cbar.ax.tick_params(labelsize=plot_kwargs.get('fontsize', 14))
+        cbar.ax.yaxis.label.set_size(plot_kwargs.get('fontsize', 14))
+
+    setting_setter(ax, before=False, **plot_kwargs)
 
     if tight_layout:
         fig.tight_layout()
@@ -434,6 +426,14 @@ def errorbar(xs: np.ndarray | list, ys: np.ndarray | list, *, xerr=None, yerr=No
             line_kwargs_iter = [{} for _ in xerr]
         if yerr is not None:
             line_kwargs_iter = [{} for _ in yerr]
+    else:
+        if xerr is not None:
+            if len(line_kwargs_iter) != len(xerr):
+                raise ValueError(f'`line_kwargs_iter` should have the same length as `xerr`, not {len(line_kwargs_iter)} and {len(xerr)}')
+        if yerr is not None:
+            if len(line_kwargs_iter) != len(yerr):
+                raise ValueError(f'`line_kwargs_iter` should have the same length as `yerr`, not {len(line_kwargs_iter)} and {len(yerr)}')
+
     for i, kwargs in enumerate(line_kwargs_iter):
         line_kwargs_iter[i]['xerr'] = xerr[i] if (xerr is not None) else None
         line_kwargs_iter[i]['yerr'] = yerr[i] if (yerr is not None) else None
@@ -682,3 +682,60 @@ def make_legend(line_kwargs_iter, labels) -> dict[str, list]:
         handles.append(plt.Line2D([0], [0], **line_kwargs))
         been.add(label)
     return {'handles': handles, 'labels': labels_out}
+
+
+def _fix_titles_legend(legend):
+    for col in legend._legend_handle_box.get_children():
+        row = col.get_children()
+        new_children: list[plt.Artist] = []
+        for hpacker in row:
+            if not isinstance(hpacker, mpl.offsetbox.HPacker):
+                new_children.append(hpacker)
+                continue
+            drawing_area, text_area = hpacker.get_children()
+            handle_artists = drawing_area.get_children()
+            if not all(a.get_visible() for a in handle_artists):
+                new_children.append(text_area)
+            else:
+                new_children.append(hpacker)
+        col._children = new_children
+
+
+def export_legend(legend_kwargs, save_loc=None, show=False, close=True, expand=[-5,-5,10,5], font_size=14):
+    # Adapted from https://stackoverflow.com/questions/4534480/get-legend-as-a-separate-picture-in-matplotlib
+    fig, ax = plt.subplots()
+    legend_kwargs = set_defaults(legend_kwargs, loc=3, framealpha=1, frameon=True, fontsize=font_size,
+                                 title_fontsize=font_size)
+    legend = fig.legend(**legend_kwargs)
+    _fix_titles_legend(legend)
+
+    ax.axis("off")
+    fig.canvas.draw()
+    bbox = legend.get_window_extent()
+    bbox = bbox.from_extents(*(bbox.extents + np.array(expand)))
+    bbox = bbox.transformed(fig.dpi_scale_trans.inverted())
+    if save_loc is not None:
+        fig.savefig(save_loc, bbox_inches=bbox)
+    if show:
+        fig.show()
+    elif close:
+        plt.close(fig)
+
+
+def export_cbar(cbar_kwargs, save_loc=None, show=False, close=True, fontsize=14, expand=[-5, -5, 5, 5]):
+    fig, ax = plt.subplots()
+    cbar_kwargs['ax'] = ax
+    ax.plot([], [])
+    colorbar = plt.colorbar(**cbar_kwargs)
+    colorbar.ax.tick_params(labelsize=fontsize)
+    colorbar.ax.yaxis.label.set_size(fontsize)
+    fig.canvas.draw()
+    bbox = colorbar.ax.get_tightbbox()
+    bbox = bbox.from_extents(*(bbox.extents + np.array(expand)))
+    bbox = bbox.transformed(fig.dpi_scale_trans.inverted())
+    if save_loc is not None:
+        fig.savefig(save_loc, bbox_inches=bbox)
+    if show:
+        fig.show()
+    if close:
+        plt.close(fig)

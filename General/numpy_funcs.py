@@ -39,14 +39,59 @@ def block_average(a, n):
     -------
     np.ndarray
     """
+    if n == 1:
+        return a
+    if len(a) == 0:
+        return np.array([])
     num = len(a) // n
     extra = 1 if len(a) % n != 0 else 0
     shape = [num, n] + [-1] * (a.ndim - 1)
-    values = np.zeros((len(a) // n + extra, *a.shape[1:]))
-    values[:num] = np.average(a[:n * num].reshape(*shape), axis=1)
+    values = np.zeros((num + extra, *a.shape[1:]))
+    if num != 0:
+        values[:num] = np.average(a[:n * num].reshape(*shape), axis=1)
     if a.shape[0] % n != 0:
         values[-1] = np.average(a[n * num:], axis=0)
     return values
+
+def block_average2(a, num):
+    """
+    Makes the block average of the array a total of num averages.
+    Parameters
+    ----------
+    a
+    num
+
+    Returns
+    -------
+
+    """
+
+
+def block_average_bounds(a, n):
+    if a.ndim != 1:
+        raise ValueError('Only 1D arrays are supported.')
+    if len(a) == 0:
+        return np.array([])
+    if n == 1:
+        if len(a) >= 2:
+            return np.array([1.5*a[0]-0.5*a[1], 1.5*a[-1]-0.5*a[-2]])
+        else:
+            return np.array([])
+
+    num = len(a) // n
+    extra = 1 if len(a) % n != 0 else 0
+    shape = [num, n]
+    bounds = np.zeros(num + 1 + extra)
+    vals = a[:n * num].reshape(*shape)
+    lower = vals[:, 0]
+    upper = vals[:, -1]
+    bounds[1:num] = (lower[1:] + upper[:-1]) / 2
+    bounds[0] = 1.5*a[0] - 0.5*a[1]
+    bounds[-1] = 1.5*a[-1] - 0.5*a[-2]
+    if extra == 1:
+        bounds[-2] = (a[n * num-1] + a[n * num]) / 2
+    return bounds
+
 
 
 def averaging(values, block_average_num=None, moving_average_num=None):

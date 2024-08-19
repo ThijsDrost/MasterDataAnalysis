@@ -26,12 +26,14 @@ NO3_max = NO3_data.get_absorbances(var_value=NO3_conc).mean(axis=0)
 H2O2_max = H2O2_data.get_absorbances(var_value=H2O2_conc).mean(axis=0)
 
 O3_wav, O3_absorbance = np.loadtxt(r"C:\Users\20222772\PycharmProjects\MasterDataAnalysis\Data_analysis\Experiments\Calibrations\Models\Ozone.txt").T
+B_wav, B_absorbance = np.loadtxt(r"C:\Users\20222772\PycharmProjects\MasterDataAnalysis\Data_analysis\Experiments\Calibrations\Models\background.txt").T
 
 models = {'NO2': {'wavelength': NO2_data.get_wavelength(), 'absorbance': NO2_max, 'concentration': [NO2_conc]},
           'NO3': {'wavelength': NO3_data.get_wavelength(), 'absorbance': NO3_max, 'concentration': [NO3_conc]},
           'H2O2': {'wavelength': H2O2_data.get_wavelength(), 'absorbance': H2O2_max, 'concentration': [H2O2_conc]},
           'O3': {'wavelength': O3_wav, 'absorbance': O3_absorbance, 'concentration': [np.max(O3_absorbance)/3300]},
+          'B': {'wavelength': B_wav, 'absorbance': B_absorbance, 'concentration': [0.025]}
           # 'O3_2': {'wavelength': O3_wav+8, 'absorbance': O3_absorbance, 'concentration': [np.max(O3_absorbance)/3300]}
           }
 
-export_models(models, rf'{models_loc}\Cuvette4.hdf5', 'mol/L')
+export_models(models, rf'{models_loc}\Cuvette5.hdf5', 'mol/L')

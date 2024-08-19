@@ -3,9 +3,11 @@ from __future__ import annotations
 from typing import Sequence
 import math
 import warnings
+from copy import deepcopy
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
+import numpy as np
 
 from General.itertools.iterator import product3
 from General.itertools import sort_by
@@ -50,12 +52,14 @@ def linestyle_cycler(index, linestyles=None):
 
 
 def _set_cycler_value(value, default, name):
-    if (value is True) or (value is None):
+    if value is True:
         return default
-    elif value is False:
-        return [None]
+    elif (value is False) or (value is None):
+        return ['none']
     elif isinstance(value, (str, tuple)):
         return [value]
+    elif isinstance(value, dict):  # maybe remove this
+        return value
     else:
         try:
             value[0]
@@ -94,8 +98,14 @@ def linelook_by(values: Sequence, *, markers: Sequence | bool | str = False, lin
 
     """
     markers = _set_cycler_value(markers, _marker_list, 'markers')
+    if isinstance(markers, dict):
+        raise ValueError('Markers should not be a dict.')
     linestyles = _set_cycler_value(linestyles, _linestyles, 'linestyles')
+    if isinstance(linestyles, dict):
+        raise ValueError('Linestyles should not be a dict.')
     colors = _set_cycler_value(colors, plt.rcParams['axes.prop_cycle'].by_key()['color'], 'colors')
+    if isinstance(colors, dict):
+        raise ValueError('Colors should not be a dict.')
 
     if math.lcm(len(markers), len(linestyles), len(colors)) < len(values):
         warnings.warn('Values will have non unique linelooks.')
@@ -118,18 +128,27 @@ def linelook_by(values: Sequence, *, markers: Sequence | bool | str = False, lin
             if vals[2] is not None:
                 given_values[value]['color'] = vals[2]
 
-    return [given_values[value] for value in values]
+    return [given_values[value].copy() for value in values]
 
 
 def linelooks_by(*, color_values: Sequence = None, linestyle_values: Sequence = None, marker_values: Sequence = None,
-                 markers: Sequence | bool | str = None, linestyles: Sequence | bool | str = None,
-                 colors: Sequence | bool | str = None) -> list[dict[str, any]]:
+                 markers: Sequence | bool | str | dict = True, linestyles: Sequence | bool | str | dict = True,
+                 colors: Sequence | bool | str | dict = True) -> list[dict[str, any]]:
     """
     Returns a list of dictionaries with the markers, linestyles, and colors for each value in `values`. If a value or a sequence
     of values is given for `markers`, `linestyles`, or `colors`, the values are used. If `True` is given, the default cyclers are
     used.
     """
     def linelooks(values, cycle, name):
+        if isinstance(cycle, dict):
+            try:
+                return [cycle[value] for value in values]
+            except KeyError as e:
+                for value in values:
+                    if value not in cycle:
+                        raise KeyError(f'Label {value} not found in {name} dict.') from e
+                raise e  # should be unreachable
+
         given_values = {}
         for value in values:
             if value not in given_values:
@@ -178,25 +197,96 @@ def linelooks_by(*, color_values: Sequence = None, linestyle_values: Sequence = 
     return result
 
 
-def legend_linelooks_by(color_labels: Sequence[str] = None, linestyle_labels: Sequence[str] = None,
-                        marker_labels: Sequence[str] = None, color_values: Sequence = None, linestyle_values: Sequence = None,
+def legend_linelooks_combines(labels, title=None, *, colors=None, linestyles=None, markers=None, sort=True):
+    def set_value(value, default, name):
+        if (value is None) or (value is False):
+            value = ['none']*len(labels)
+        elif value is True:
+            value = [default[i % len(default)] for i in range(len(labels))]
+            if len(labels) > len(default):
+                warnings.warn(f'Values will have non unique {name}.')
+        elif len(value) == 1:
+            value = value*len(labels)
+        elif len(value) != len(labels):
+            raise ValueError(rf'The number of {name} should be the same as the number of labels.')
+        return value
+
+    markers = set_value(markers, _marker_list, 'markers')
+    linestyles = set_value(linestyles, _linestyles, 'linestyles')
+    colors = set_value(colors, plt.rcParams['axes.prop_cycle'].by_key()['color'], 'colors')
+
+    line_kwargs_iter = [{'color': c, 'linestyle': l, 'marker': m} for c, l, m in zip(colors, linestyles, markers)]
+
+    line_handles = []
+    label_values = []
+    if title is not None:
+        line_handles.append(Patch(visible=False))
+        title = r'$\bf{' + title.replace(' ', r'}$ $\bf{') + r'}$'
+        label_values.append(title)
+
+    try:
+        sorter = [float(i) for i in labels]
+    except ValueError:
+        sorter = labels
+
+    temp_line_handles = []
+    temp_labels = []
+    for label, kwargs in zip(labels, line_kwargs_iter):
+        temp_line_handles.append(plt.Line2D([], [], label=label, **kwargs))
+        temp_labels.append(label)
+
+    label, line = sort_by(sorter, temp_labels, temp_line_handles) if sort else (temp_labels, temp_line_handles)
+    line_handles.extend(line)
+    label_values.extend(label)
+
+    return line_kwargs_iter, {'handles': line_handles, 'labels': label_values}
+
+
+def legend_linelooks_by(color_labels: Sequence[str|float|int] = None, linestyle_labels: Sequence[str|float|int] = None,
+                        marker_labels: Sequence[str|float|int] = None, color_values: Sequence = None, linestyle_values: Sequence = None,
                         marker_values: Sequence = None, no_color='k', no_marker=True, no_linestyle=True,
                         color_title=None, marker_title=None, linestyle_title=None, sort=True):
     # make the line_kwargs_iter
-    color_labels = color_labels or [None]
-    color_values = color_values or [None]
-    if len(color_labels) != len(color_values):
-        raise ValueError('The number of color labels should be the same as the number of color values.')
+    def make_values(labels, values, name, default):
+        if labels is None:
+            labels = [None]
+            values = [None]
+        else:
+            if (values is None) or (values is True):
+                unique_labels = list(set(labels))
+                value_dict = {unique_labels[i]: default[i % len(default)] for i in range(len(unique_labels))}
+                values = [deepcopy(value_dict[label]) for label in labels]
+            if isinstance(values, dict):
+                try:
+                    values = [deepcopy(values[label]) for label in labels]
+                except KeyError as e:
+                    for label in labels:
+                        if label not in values:
+                            raise KeyError(f'Label {label} not found in {name} dict.') from e
+                    raise e
+            if not isinstance(values, (Sequence, np.ndarray)):
+                raise TypeError(f'Values should be a `Sequence`, `dict`, or `None`, not {type(values)}.')
+            if len(labels) != len(values):
+                raise ValueError(f'The number of {name} labels should be the same as the number of {name} values, not {len(labels)} and {len(values)}.')
+        return labels, values
 
-    linestyle_labels = linestyle_labels or [None]
-    linestyle_values = linestyle_values or [None]
-    if len(linestyle_labels) != len(linestyle_values):
-        raise ValueError('The number of linestyle labels should be the same as the number of linestyle values.')
+    color_labels, color_values = make_values(color_labels, color_values, 'color', plt.rcParams['axes.prop_cycle'].by_key()['color'])
+    linestyle_labels, linestyle_values = make_values(linestyle_labels, linestyle_values, 'linestyle', _linestyles)
+    marker_labels, marker_values = make_values(marker_labels, marker_values, 'marker', _marker_list)
+    # color_labels = color_labels or [None]
+    # color_values = color_values or [None]
+    # if len(color_labels) != len(color_values):
+    #     raise ValueError('The number of color labels should be the same as the number of color values.')
 
-    marker_labels = marker_labels or [None]
-    marker_values = marker_values or [None]
-    if len(marker_labels) != len(marker_values):
-        raise ValueError('The number of marker labels should be the same as the number of marker values.')
+    # linestyle_labels = linestyle_labels or [None]
+    # linestyle_values = linestyle_values or [None]
+    # if len(linestyle_labels) != len(linestyle_values):
+    #     raise ValueError('The number of linestyle labels should be the same as the number of linestyle values.')
+    #
+    # marker_labels = marker_labels or [None]
+    # marker_values = marker_values or [None]
+    # if len(marker_labels) != len(marker_values):
+    #     raise ValueError('The number of marker labels should be the same as the number of marker values.')
 
     line_kwargs_iter = []
     c_vals = []
@@ -219,13 +309,13 @@ def legend_linelooks_by(color_labels: Sequence[str] = None, linestyle_labels: Se
     c_vals = c_vals or None
     l_vals = l_vals or None
     m_vals = m_vals or None
-    return legend_linelooks(line_kwargs_iter, color_labels=c_vals, linestyle_labels=l_vals, marker_labels=m_vals,
-                            no_color=no_color, no_marker=no_marker, no_linestyle=no_linestyle,
-                            color_title=color_title, marker_title=marker_title, linestyle_title=linestyle_title, sort=sort)
+    return line_kwargs_iter, legend_linelooks(line_kwargs_iter, color_labels=c_vals, linestyle_labels=l_vals, marker_labels=m_vals,
+                no_color=no_color, no_marker=no_marker, no_linestyle=no_linestyle, color_title=color_title,
+                marker_title=marker_title, linestyle_title=linestyle_title, sort=sort)
 
 
-def legend_linelooks(line_kwargs_iter, /, *, color_labels: Sequence[str] = None, linestyle_labels: Sequence[str] = None,
-                     marker_labels: Sequence[str] = None, no_color='k', no_marker=True, no_linestyle=True,
+def legend_linelooks(line_kwargs_iter, /, *, color_labels: Sequence[str|float|int] = None, linestyle_labels: Sequence[str|float|int] = None,
+                     marker_labels: Sequence[str|float|int] = None, no_color='k', no_marker=True, no_linestyle=True,
                      color_title=None, marker_title=None, linestyle_title=None, sort=True)\
         -> dict[str, list[plt.Line2D | LegendHandle] | list[str]]:
     line_handles = []
@@ -246,7 +336,10 @@ def legend_linelooks(line_kwargs_iter, /, *, color_labels: Sequence[str] = None,
 
         for line_kwargs, label in zip(line_kwargs_iter, labels):
             if label in been:
-                if been[label] != line_kwargs.get(name, 'none'):
+                if isinstance(been[label], np.ndarray):
+                    if not np.array_equal(been[label], line_kwargs.get(name, 'none')):
+                        raise ValueError(f'The same label has different {name}.')
+                elif been[label] != line_kwargs.get(name, 'none'):
                     raise ValueError(f'The same label has different {name}.')
             else:
                 this_no_marker = None
@@ -286,7 +379,8 @@ def legend_linelooks(line_kwargs_iter, /, *, color_labels: Sequence[str] = None,
         if labels is not None:
             if title is not None:
                 line_handles.append(Patch(visible=False))
-                label_values.append(f'$\\bf{{{title}}}$')
+                title = r'$\bf{' + title.replace(' ', r'}$ $\bf{') + r'}$'
+                label_values.append(title)
             line, label = make(labels, name, no_marker, no_linestyle)
 
             try:

@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import warnings
+from typing import Sequence
 
 import attrs
 import numpy as np
 import math
+import pandas as pd
 
 from General import numpy_funcs as npf
 from General.checking._validators import Validator
 from General.plotting import plot
-from General.plotting.cbar import cbar_norm_colors
+import General.plotting.cbar as cbar
 
 
 @attrs.define(frozen=True)
@@ -164,9 +165,11 @@ class TemporalSpectrum:
         if times.ndim != 1:
             raise ValueError('`times` must be a 1D array.')
         if intensities.shape[1] != len(wavelengths):
-            raise ValueError('The second dimension of `intensities` must be equal to the length of `wavelengths`.')
+            raise ValueError(f'The second dimension of `intensities` must be equal to the length of `wavelengths`, not '
+                             f'{intensities.shape[1]} and {len(wavelengths)}.')
         if len(times) != intensities.shape[0]:
-            raise ValueError('The length of `times` must be equal to the first dimension of `intensities`.')
+            raise ValueError(f'The length of `times` must be equal to the first dimension of `intensities`, not '
+                             f'{len(times)} and {intensities.shape[0]}.')
         if np.any(np.diff(times) < 0):
             sort_idx = np.argsort(times)
             times = times[sort_idx]
@@ -192,7 +195,24 @@ class TemporalSpectrum:
         -------
         TemporalSpectrum
         """
-        mask = (self.wavelengths >= start) & (self.wavelengths <= end)
+        return self.wavelength_ranges([(start, end)])
+
+    def wavelength_ranges(self, *ranges: tuple[float | int, float | int]):
+        """
+        Returns the Spectrum2D with the intensities and wavelengths within the given ranges.
+
+        Parameters
+        ----------
+        ranges: Sequence[tuple[float, float]]
+            The ranges to keep
+
+        Returns
+        -------
+        TemporalSpectrum
+        """
+        mask = np.zeros(self.wavelengths.shape, dtype=bool)
+        for start, end in ranges:
+            mask |= (self.wavelengths >= start) & (self.wavelengths <= end)
         return TemporalSpectrum(self.wavelengths[mask], self.intensities[:, mask], self.times)
 
     def block_average(self, n: int) -> TemporalSpectrum:
@@ -401,13 +421,17 @@ class TemporalSpectrum:
 
         return TemporalSpectrum(self.wavelengths[item[1],], self.intensities[item], self.times[item[0],])
 
-    def plot_intensity_with_time(self, **lines_kwargs):
+    def plot_intensity_with_time(self, bounded_cbar=False, **lines_kwargs):
         plot_kwargs = {'xlabel': 'Wavelength [nm]', 'ylabel': 'Intensity [A.U]'}
         if 'plot_kwargs' in lines_kwargs:
             plot_kwargs = plot.set_defaults(lines_kwargs['plot_kwargs'], **plot_kwargs)
             del lines_kwargs['plot_kwargs']
-        colors, cm = cbar_norm_colors(self.times)
-        cbar_kwargs = {'label': 'Time [s]', 'mappable': cm}
+        if bounded_cbar:
+            colors, cbar_kwargs = cbar.bounded_cbar(self.times)
+        else:
+            colors, cm = cbar.cbar_norm_colors(self.times)
+            cbar_kwargs = {'mappable': cm}
+        cbar_kwargs['label'] = 'Time [s]'
         if 'cbar_kwargs' in lines_kwargs:
             cbar_kwargs = plot.set_defaults(lines_kwargs['cbar_kwargs'], **cbar_kwargs)
             del lines_kwargs['cbar_kwargs']

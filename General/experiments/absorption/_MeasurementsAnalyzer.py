@@ -177,7 +177,7 @@ class MeasurementsAnalyzer:
         return plot.lines(xs, np.sum(ys, axis=1), plot_kwargs=plot_kwargs, **kwargs)
 
     def fit(self, model: lmfit.CompositeModel, timescale='min', num=None, average_num=None, use_previous=True, wavelength_range: tuple[float, float] = None, *,
-            corrected=True, masked=True, plot_kwargs=None, save_loc=None, save_suffix='', show=True, save_kwargs=None, cbar_kwargs=None, line_kwargs=None,
+            corrected=True, masked=True, plot_kwargs=None, save_loc=None, save_suffix='', show=False, save_kwargs=None, cbar_kwargs=None, line_kwargs=None,
             legend_kwargs=None, export_fit_loc=None, **kwargs):
         timestamps_s = self.data_set.variable
         timestamps_s = timestamps_s - timestamps_s[0]
@@ -226,5 +226,6 @@ class MeasurementsAnalyzer:
             if '.' not in save_suffix:
                 save_suffix += '.pdf'
             save_loc = os.path.join(save_loc, f'absorbance with wavelength over time{save_suffix}')
-        return (names, timestamps, res, std), plot.errorrange(timestamps, res, yerr=std, labels=names, plot_kwargs=plot_kwargs, save_loc=save_loc, show=show, save_kwargs=save_kwargs,
-                             cbar_kwargs=cbar_kwargs, line_kwargs=line_kwargs, legend_kwargs=legend_kwargs, **kwargs)
+        return (names, timestamps, res, std), plot.errorrange(
+            timestamps, res, yerr=std, labels=names, plot_kwargs=plot_kwargs, save_loc=save_loc, show=show, save_kwargs=save_kwargs,
+            cbar_kwargs=cbar_kwargs, line_kwargs=line_kwargs, legend_kwargs=legend_kwargs, **kwargs)

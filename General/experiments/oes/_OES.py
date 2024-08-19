@@ -1,10 +1,12 @@
 import warnings
+import os
 
 from attrs import define
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import lmfit
+import pandas as pd
 
 from General.plotting import plot, linestyles
 from General.plotting import cbar as mcbar
@@ -56,6 +58,10 @@ class OESData:
     def intensities(self):
         return self.spectrum.intensities
 
+    @property
+    def times(self):
+        return self.spectrum.times
+
     def remove_dead_pixels(self):
         spectrometer = self.spectrometer_settings.get('serial_number', None)
         if spectrometer is None:
@@ -93,17 +99,18 @@ class OESData:
             up = np.where(diff == 1)[0][0]
             down = np.where(diff == -1)[0][0]
         except IndexError:
-            warnings.warn('No background found.')
-            return self
+            length = len(values)
+            warnings.warn('No background found. Assuming first and last third are background')
+            self.remove_background_interp((None, 3), (length-4, None))
 
         up = up - 3
         down = down + 4
         if up < 0 or down >= len(values):
-            warnings.warn('No background found.')
-            return self
+            length = len(values)
+            warnings.warn('No background found. Assuming first and last third are background')
+            return self.remove_background_interp((None, 3), (length-4, None))
 
         return self.remove_background_interp((None, up), (down, None))
-
 
     def remove_baseline(self, wavelength_range):
         spectrum = self.spectrum.remove_baseline(wavelength_range)
@@ -118,16 +125,21 @@ class OESData:
         return OESData(spectrum, self.spectrometer_settings)
 
     def intensity_vs_wavelength_with_time(self, *, plot_kwargs=None, cbar_kwargs=None, cbar='turbo', block_average: int = None,
-                                          moving_average: int = None, background_index=None, **kwargs):
+                                          moving_average: int = None, background_index=None, inverse_order=False, **kwargs):
         x_values = self.spectrum.wavelengths
         y_values = self.spectrum.intensities
         t_values = self.spectrum.times
 
         y_values = npf.averaging(y_values, block_average_num=block_average, moving_average_num=moving_average)
         t_values = npf.averaging(t_values, block_average_num=block_average, moving_average_num=moving_average)
+        t_values = t_values - t_values[0]
 
         if background_index is not None:
             y_values = y_values - y_values[background_index]
+
+        if inverse_order:
+            y_values = y_values[::-1]
+            t_values = t_values[::-1]
 
         plot_kwargs = plot.set_defaults(plot_kwargs, xlabel='Wavelength [nm]', ylabel='Intensity [A.U.]')
 
@@ -136,13 +148,20 @@ class OESData:
 
         return plot.lines(x_values, y_values, colors=colors, plot_kwargs=plot_kwargs, cbar_kwargs=cbar_kwargs, **kwargs)
 
-    def total_intensity_vs_time(self, *, plot_kwargs=None, block_average: int = None, moving_average: int = None, **kwargs):
-        intensities = npf.averaging(self.spectrum.intensities, block_average_num=block_average, moving_average_num=moving_average)
+    def total_intensity_vs_time(self, wav_range: tuple[float, float] | tuple[tuple[float, float], ...] = None,
+                                *, plot_kwargs=None, block_average: int = None, moving_average: int = None, **kwargs):
+        if wav_range is not None:
+            intensity = self.ranged_intensity(wav_range)
+        else:
+            intensity = np.mean(self.spectrum.intensities, axis=1)
+
+        intensities = npf.averaging(intensity, block_average_num=block_average, moving_average_num=moving_average)
         t_values = npf.averaging(self.spectrum.times, block_average_num=block_average, moving_average_num=moving_average)
+        t_values = (t_values - t_values[0])/60
 
-        plot_kwargs = plot.set_defaults(plot_kwargs, xlabel='time [s]', ylabel='Intensity [A.U.]')
+        plot_kwargs = plot.set_defaults(plot_kwargs, xlabel='Time [min]', ylabel='Intensity [A.U.]')
 
-        return plot.lines(t_values, np.sum(intensities, axis=1), plot_kwargs=plot_kwargs, **kwargs)
+        return plot.lines(t_values, intensities, plot_kwargs=plot_kwargs, **kwargs)
 
     def total_intensity_vs_index(self, *, plot_kwargs=None, block_average: int = None, moving_average: int = None, **kwargs):
         intensities = npf.averaging(self.spectrum.intensities, block_average_num=block_average, moving_average_num=moving_average)
@@ -174,9 +193,9 @@ class OESData:
                 end_idx = np.searchsorted(self.spectrum.wavelengths, end)
                 mask[start_idx:end_idx] = True
 
-            return np.sum(self.spectrum.intensities[:, mask], axis=1)
+            return np.mean(self.spectrum.intensities[:, mask], axis=1)
         else:
-            return np.sum(self.spectrum.intensities, axis=1)
+            return np.mean(self.spectrum.intensities, axis=1)
 
     def peak_intensity(self, peaks: tuple[float | int, ...] | str, *, block_average=None, moving_average=None,
                        is_on_kwargs=None):
@@ -222,9 +241,9 @@ class OESData:
                                                  legend_kwargs=None, labels=None, **kwargs):
         t_values, ranged_intensities = self.ranged_intensities(ranges, block_average=block_average, moving_average=moving_average)
 
-        plot_kwargs = plot.set_defaults(plot_kwargs, xlabel='time [s]', ylabel='Intensity [A.U.]')
+        plot_kwargs = plot.set_defaults(plot_kwargs, xlabel='Time [s]', ylabel='Intensity [A.U.]')
         line_kwargs = plot.set_defaults(line_kwargs, linestyle='', marker='.')
-        legend_kwargs = plot.set_defaults(legend_kwargs, title='wav [nm]')
+        legend_kwargs = plot.set_defaults(legend_kwargs, title='Wav. [nm]')
 
         if labels is None:
             labels = [f'{(start + end)/2}' for start, end in ranges]
@@ -245,7 +264,7 @@ class OESData:
 
         t_values = (t_values - t_values[0])/60
 
-        plot_kwargs = plot.set_defaults(plot_kwargs, xlabel='time [min]', ylabel='Intensity [A.U.]')
+        plot_kwargs = plot.set_defaults(plot_kwargs, xlabel='Time [min]', ylabel='Intensity [A.U.]')
 
         if cbar:
             if cbar is True:
@@ -277,7 +296,7 @@ class OESData:
             return plot.lines(t_values, ranged_intensities, plot_kwargs=plot_kwargs, labels=labels, line_kwargs=line_kwargs,
                               legend_kwargs=legend_kwargs, **kwargs)
 
-    def peak_loc_intensities_with_time(self, peaks: tuple[float | int, ...] | str, is_on_kwargs=None):
+    def peak_loc_intensities_with_time(self, peaks: tuple[float | int, ...] | str, is_on_kwargs=None, distance=1):
         if isinstance(peaks, str):
             try:
                 peaks = PEAKS[peaks.lower()]
@@ -295,7 +314,7 @@ class OESData:
         peak_relative_locs = np.empty((len(peaks), len(inten_vals)))
         for index, peak in enumerate(peaks):
             peak_idx = np.searchsorted(self.spectrum.wavelengths, peak)
-            max_idx = peak_idx - 1 + np.argmax(inten_vals[:, peak_idx - 1:peak_idx + 2], axis=1)
+            max_idx = peak_idx - distance + np.argmax(inten_vals[:, (peak_idx - distance):(peak_idx + 1 + distance)], axis=1)
             x, y = WavelengthCalibration.quadratic_peak_xy(self.spectrum.wavelengths[(max_idx-1, max_idx, max_idx+1),],
                                                            inten_vals[np.arange(len(max_idx)), (max_idx-1, max_idx, max_idx+1)])
             wavs = (0.5*(self.spectrum.wavelengths[max_idx] + self.spectrum.wavelengths[max_idx - 1]),
@@ -376,9 +395,17 @@ class OESData:
                 wavelength_range = [wavelength_range]
             mask = np.full(len(data.spectrum.wavelengths), False)
             for start, end in wavelength_range:
-                start_idx = np.searchsorted(data.spectrum.wavelengths, start)
-                end_idx = np.searchsorted(data.spectrum.wavelengths, end)
-                mask[start_idx:end_idx] = True
+                if isinstance(start, tuple):
+                    start_idx = np.searchsorted(data.spectrum.wavelengths, start[0])
+                    end_idx = np.searchsorted(data.spectrum.wavelengths, start[1])
+                    mask[start_idx:end_idx] = True
+                    start_idx = np.searchsorted(data.spectrum.wavelengths, end[0])
+                    end_idx = np.searchsorted(data.spectrum.wavelengths, end[1])
+                    mask[start_idx:end_idx] = True
+                else:
+                    start_idx = np.searchsorted(data.spectrum.wavelengths, start)
+                    end_idx = np.searchsorted(data.spectrum.wavelengths, end)
+                    mask[start_idx:end_idx] = True
             intensities = data.spectrum.intensities[:, mask]
         else:
             intensities = data.spectrum.intensities
@@ -393,7 +420,7 @@ class OESData:
         else:
             inten_min = np.min(intensities)
             inten_max = np.max(intensities)
-            return intensities > inten_min + relative_threshold * (inten_max - inten_min)
+            return intensities > (inten_min + relative_threshold * (inten_max - inten_min))
 
     @staticmethod
     def peaks(string: str):
@@ -408,3 +435,51 @@ class OESData:
             return ENERGIES[string.lower()]
         except KeyError:
             raise ValueError(f'No energies found for {string}.')
+
+    def intensity_vs_time_with_wavelength(self, *, plot_kwargs=None, cbar_kwargs=None, cbar='turbo', block_average: int = None,
+                                          moving_average: int = None, background_index=None, inverse_order=False, norm=False, **kwargs):
+        x_values = self.spectrum.wavelengths
+        y_values = self.spectrum.intensities
+        t_values = self.spectrum.times
+
+        y_values = npf.averaging(y_values, block_average_num=block_average, moving_average_num=moving_average)
+        t_values = npf.averaging(t_values, block_average_num=block_average, moving_average_num=moving_average)
+        t_values = (t_values - t_values[0])/60
+        y_values = y_values.T
+
+        if background_index is not None:
+            y_values = y_values - y_values[background_index]
+
+        if inverse_order:
+            y_values = y_values[::-1]
+            x_values = x_values[::-1]
+
+        if norm:
+            y_values = y_values / np.mean(y_values[:, -3:], axis=1)[:, None]
+
+        plot_kwargs = plot.set_defaults(plot_kwargs, xlabel='Time [min]', ylabel='Intensity [A.U.]')
+
+        colors, mappable = mcbar.cbar_norm_colors(x_values, cbar=cbar)
+        cbar_kwargs = plot.set_defaults(cbar_kwargs, label='Wavelength [nm]', mappable=mappable)
+
+        return plot.lines(t_values, y_values, colors=colors, plot_kwargs=plot_kwargs, cbar_kwargs=cbar_kwargs, **kwargs)
+
+    @staticmethod
+    def read_ava_multi_txt(filename):
+        lines = open(filename, 'r').readlines()
+        serial_number = lines[4].split(':')[1].strip()
+        integration_time = float(lines[1].split(':')[1].strip().replace(',', '.'))
+        n_smoothing = int(lines[2].split(':')[1].strip())
+        timestamp_ms = int(os.path.getmtime(filename) * 1000)
+        timestamps_ms = np.array([float(x.replace(',', '.').strip())/100 for x in lines[9].split(';')[3:]])
+
+        file = pd.read_csv(filename, sep=';', skiprows=9, decimal=',', index_col=0)
+        spectra = file.drop([file.columns[0], file.columns[1]], axis=1)
+
+        spectrometer_settings = {
+            'serial_number': serial_number,
+            'integration_time': integration_time,
+            'n_smoothing': n_smoothing
+        }
+        spectrum = TemporalSpectrum(spectra.index.to_numpy(), spectra.to_numpy().T, timestamps_ms/1000)
+        return OESData(spectrum, spectrometer_settings)

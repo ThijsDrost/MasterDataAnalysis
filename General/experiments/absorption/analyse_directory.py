@@ -1,12 +1,11 @@
 import os
-import math
+import warnings
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
 import scipy
 import lmfit
-import bottleneck as bn
 
 from General.experiments.absorption import MeasurementsAnalyzer
 from General.experiments.hdf5.readHDF5 import read_hdf5, DataSet
@@ -14,15 +13,48 @@ from General.experiments.oes import OESData
 from General.experiments.absorption.Models import multi_species_model
 from General.experiments.waveforms import Waveforms, MeasuredWaveforms
 from General.plotting import plot, linestyles, cbar
-from General.plotting.linestyles import linelooks_by, legend_linelooks, legend_linelooks_by
+from General.plotting.linestyles import linelooks_by, legend_linelooks, legend_linelooks_by, legend_linelooks_combines
 from General.simulation.specair.specair import N2SpecAirSimulations, Spectrum, SpecAirSimulations
-from General.itertools import argmax, argmin, flatten_2D
+from General.itertools import argmax, argmin, flatten_2D, transpose, sort_by
 import General.numpy_funcs as npf
 
+width_colors = {
+    '0.3': 'C0',
+    '0.5': 'C1',
+    '1': 'C2',
+    '1.5': 'C7',
+    '2': 'C3',
+    '3': 'C4',
+    '4': 'C6',
+    '5': 'C5',
+}
 
-def analyse_directory_absorption(data_loc, voltages, pulse_lengths, save_loc=None, save_kwargs=None, lines_kwargs=None,
-                                 model_loc=r'C:\Users\20222772\PycharmProjects\MasterDataAnalysis\Data_analysis\Experiments\Calibrations\Models\Cuvette4.hdf5'):
-    model = multi_species_model(model_loc, add_zero=True, add_constant=True, add_slope=True)
+species_style = {
+    r'N$_{2}$+OH': '-',
+    r'N$_{2}$': '-',
+    r'OH': '-',
+    r'H$_{\alpha}$': '-.',
+    'Ar': '--',
+    'O': ':'
+}
+
+
+def analyse_directory_absorption(data_loc, voltages, pulse_lengths, save_loc=None, save_kwargs=None, lines_kwargs=None, add_slope=True,
+                                 model_loc=r'C:\Users\20222772\PycharmProjects\MasterDataAnalysis\Data_analysis\Experiments\Calibrations\Models\Cuvette4.hdf5',
+                                 show=False, show2=False, save_loc2=None, save_loc3=None, block_average_time=None, block_average_wav=None):
+    if block_average_wav is not None:
+        for voltage in voltages:
+            for pulse in pulse_lengths:
+                loc = f'{data_loc}_{voltage}_{pulse}.hdf5'
+                if not os.path.exists(loc):
+                    continue
+                data: DataSet = read_hdf5(loc)['absorbance'].remove_index(-1)
+                break
+            break
+        wav_bounds = npf.block_average_bounds(data.wavelength, block_average_wav)
+        model = multi_species_model(model_loc, add_zero=True, add_constant=True, add_slope=add_slope, wavelength_bounds=wav_bounds)
+    else:
+        model = multi_species_model(model_loc, add_zero=True, add_constant=True, add_slope=add_slope)
 
     voltages_ = []
     pulses_ = []
@@ -31,11 +63,25 @@ def analyse_directory_absorption(data_loc, voltages, pulse_lengths, save_loc=Non
     for voltage in voltages:
         for pulse in pulse_lengths:
             loc = f'{data_loc}_{voltage}_{pulse}.hdf5'
+            if not os.path.exists(loc):
+                continue
 
             data: DataSet = read_hdf5(loc)['absorbance'].remove_index(-1)
+            if block_average_time is not None:
+                absorbances = npf.block_average(data.absorbances, block_average_time)
+                variable = npf.block_average(data.variable, block_average_time)
+                wavelengths = npf.block_average(data.wavelength, block_average_time)
+                measurement_num = npf.block_average(data.measurement_num, block_average_time)
+                data = DataSet(wavelengths, absorbances, variable, measurement_num, data.variable_name, data.wavelength_range,
+                               data._selected_num)
+            if block_average_wav is not None:
+                absorbances = [npf.block_average(abs, block_average_wav) for abs in data.absorbances]
+                data = DataSet(data.wavelength, absorbances, data.variable, data.measurement_num, data.variable_name, data.wavelength_range,
+                               data._selected_num)
+
             analyzer = MeasurementsAnalyzer(data)
 
-            result, _ = analyzer.fit(model, wavelength_range=(250, 400))
+            result, _ = analyzer.fit(model, wavelength_range=(250, 400), show=show2, save_loc=save_loc2, export_fit_loc=save_loc3)
             results_.append(result)
             pulses_.append(pulse)
             voltages_.append(voltage)
@@ -46,9 +92,10 @@ def analyse_directory_absorption(data_loc, voltages, pulse_lengths, save_loc=Non
     no3 = [result[2][2] for result in results_]
 
     lines_kwargs = lines_kwargs or {}
-
-    line_kwargs = linelooks_by(color_values=voltages_, linestyle_values=pulses_)
-    legend_kwargs = legend_linelooks(line_kwargs, color_labels=voltages_, linestyle_labels=pulses_)
+    v = [v.replace('kV', '') for v in voltages_]
+    p = [p.replace('us', '') for p in pulses_]
+    line_kwargs = linelooks_by(color_values=p, linestyle_values=v, colors=width_colors)
+    legend_kwargs = legend_linelooks(line_kwargs, color_labels=p, linestyle_labels=v, color_title='W [us]', linestyle_title='H [kV]')
     plot_kwargs = {'ylabel': 'Concentration [mM]', 'xlabel': 'Time [min]'}
 
     if 'legend_kwargs' in lines_kwargs:
@@ -59,13 +106,13 @@ def analyse_directory_absorption(data_loc, voltages, pulse_lengths, save_loc=Non
         del lines_kwargs['plot_kwargs']
     h2o2_loc = save_loc + '_h2o2.pdf' if save_loc else None
     plot.lines(times_, h2o2_, line_kwargs_iter=line_kwargs, legend_kwargs=legend_kwargs, plot_kwargs=plot_kwargs,
-               save_loc=h2o2_loc, save_kwargs=save_kwargs, **lines_kwargs)
+               save_loc=h2o2_loc, save_kwargs=save_kwargs, show=show, **lines_kwargs)
     no2_loc = save_loc + '_no2.pdf' if save_loc else None
     plot.lines(times_, no2, line_kwargs_iter=line_kwargs, legend_kwargs=legend_kwargs, plot_kwargs=plot_kwargs,
-               save_loc=no2_loc, save_kwargs=save_kwargs, **lines_kwargs)
+               save_loc=no2_loc, save_kwargs=save_kwargs, show=show, **lines_kwargs)
     no3_loc = save_loc + '_no3.pdf' if save_loc else None
     return plot.lines(times_, no3, line_kwargs_iter=line_kwargs, legend_kwargs=legend_kwargs, plot_kwargs=plot_kwargs,
-                      save_loc=no3_loc, save_kwargs=save_kwargs, **lines_kwargs)
+                      save_loc=no3_loc, save_kwargs=save_kwargs, show=show, **lines_kwargs)
 
 
 def analyse_fit(loc, plot_every_nth_fit, save_loc, model, plot_kwargs=None, wavelength_range=(250, 400),
@@ -125,6 +172,8 @@ def analyse_directory_argon_emission(data_loc, voltages, pulse_lengths, *, save_
     argon_results_std = {}
     argon_results_std2 = {}
     argon_wavs = {}
+    argon_ratios = {}
+    argon_ratios_times = {}
 
     peak_intensities = []
     voltage_vals = []
@@ -138,6 +187,9 @@ def analyse_directory_argon_emission(data_loc, voltages, pulse_lengths, *, save_
         argon_wavs[voltage] = {}
         argon_results_std[voltage] = {}
         argon_results_std2[voltage] = {}
+        argon_ratios[voltage] = {}
+        argon_ratios_times[voltage] = {}
+
         peak_intensity = []
         meas_num = []
         for pulse in pulse_lengths:
@@ -149,12 +201,12 @@ def analyse_directory_argon_emission(data_loc, voltages, pulse_lengths, *, save_
             data.remove_dead_pixels()
             data.remove_baseline((880, 900))
             plot_kwargs = {'title': f'{voltage} {pulse}'}
-            t_save_loc = rf'{save_loc2}_{voltage}_{pulse}.pdf' if save_loc2 else None
+            t_save_loc = rf'{save_loc2}{voltage}_{pulse}.pdf' if save_loc2 else None
             data.peak_intensity_vs_wavelength_with_time('argon', plot_kwargs=plot_kwargs, show=show2, close=not show2,
                                                         save_loc=t_save_loc, save_kwargs=save_kwargs2)
 
             plot_kwargs = {'title': f'{voltage} {pulse}'}
-            t_save_loc = rf'{save_loc2}_{voltage}_{pulse}_rel.pdf' if save_loc2 else None
+            t_save_loc = rf'{save_loc2}{voltage}_{pulse}_rel.pdf' if save_loc2 else None
             data.peak_intensity_vs_wavelength_with_time('argon', plot_kwargs=plot_kwargs, norm=True, show=show2, close=not show2,
                                                         save_loc=t_save_loc, save_kwargs=save_kwargs2)
 
@@ -167,15 +219,19 @@ def analyse_directory_argon_emission(data_loc, voltages, pulse_lengths, *, save_
             t_save_loc = rf'{save_loc2}_{voltage}_{pulse}_ratio_time.pdf' if save_loc else None
             ratios = peak_intensities_with_time/peak_intensities_with_time[5]
             mask = np.nanmax(ratios, axis=0) < 1.5
+            if np.sum(mask) == 0:
+                continue
+            argon_ratios[voltage][pulse] = ratios
+            argon_ratios_times[voltage][pulse] = time_vals
             time_vals, ratios = time_vals[mask], ratios[:, mask]
             plot.lines(time_vals, ratios, colors=colors, cbar_kwargs=cbar_kwargs,
                        plot_kwargs=plot_kwargs, save_loc=t_save_loc, save_kwargs=save_kwargs2, show=show2, close=not show2)
             plot_kwargs['ylim'] = (0.6, 1.025)
-            t_save_loc = rf'{save_loc2}_{voltage}_{pulse}_ratio_time_zoom1.pdf' if save_loc else None
+            t_save_loc = rf'{save_loc2}{voltage}_{pulse}_ratio_time_zoom1.pdf' if save_loc else None
             plot.lines(time_vals, ratios, colors=colors, cbar_kwargs=cbar_kwargs,
                        plot_kwargs=plot_kwargs, save_loc=t_save_loc, save_kwargs=save_kwargs2, show=show2, close=not show2)
             plot_kwargs['ylim'] = (0, 0.38)
-            t_save_loc = rf'{save_loc2}_{voltage}_{pulse}_ratio_time_zoom2.pdf' if save_loc else None
+            t_save_loc = rf'{save_loc2}{voltage}_{pulse}_ratio_time_zoom2.pdf' if save_loc else None
             plot.lines(time_vals, ratios, colors=colors, cbar_kwargs=cbar_kwargs,
                        plot_kwargs=plot_kwargs, save_loc=t_save_loc, save_kwargs=save_kwargs2, show=show2, close=not show2)
 
@@ -211,21 +267,76 @@ def analyse_directory_argon_emission(data_loc, voltages, pulse_lengths, *, save_
         t_cbar_kwargs = {'mappable': plt.cm.ScalarMappable(norm=norm, cmap=cmap), 'label': 'Peak wavelength [nm]',
                          'ticks': tick_loc, 'format': ticker}
 
-        plot_kwargs = {'ylabel': 'Relative intensity', 'ylim': (0, 1.05), 'xlabel': 'Pulse width [us]'}
+        plot_kwargs = {'ylabel': 'Relative intensity', 'ylim': (0., 1.05), 'xlabel': 'Pulse width [us]'}
 
-        t_save_loc = rf'{save_loc}_{voltage}.pdf' if save_loc else None
+        t_save_loc = rf'{save_loc}{voltage}.pdf' if save_loc else None
         plot.errorbar(pulse_vals, peak_intensity_norm, yerr=std_val_2, line_kwargs=line_kwargs, colors=colors, cbar_kwargs=t_cbar_kwargs,
                       save_loc=t_save_loc, save_kwargs=save_kwargs, plot_kwargs=plot_kwargs, show=show1, close=not show1)
 
         plot_kwargs['ylim'] = (0.6, 0.9)
-        t_save_loc = rf'{save_loc}_{voltage}_zoom1.pdf' if save_loc else None
+        t_save_loc = rf'{save_loc}{voltage}_zoom1.pdf' if save_loc else None
         plot.errorbar(pulse_vals, peak_intensity_norm, yerr=std_val_2, line_kwargs=line_kwargs, colors=colors, close=not show1,
                       cbar_kwargs=t_cbar_kwargs, save_loc=t_save_loc, save_kwargs=save_kwargs, plot_kwargs=plot_kwargs, show=show1)
 
         plot_kwargs['ylim'] = (0, 0.38)
-        t_save_loc = rf'{save_loc}_{voltage}_zoom2.pdf' if save_loc else None
+        t_save_loc = rf'{save_loc}{voltage}_zoom2.pdf' if save_loc else None
         plot.errorbar(pulse_vals, peak_intensity_norm, yerr=std_val_2, line_kwargs=line_kwargs, colors=colors, close=not show1,
                       cbar_kwargs=t_cbar_kwargs, save_loc=t_save_loc, save_kwargs=save_kwargs, plot_kwargs=plot_kwargs, show=show1)
+
+        ratio_vals = [[npf.block_average(argon_ratios[voltage][pulse][x], 10) for pulse in argon_ratios[voltage]] for x in
+                      range(len(peak_wav))]
+        ratio_times = [[npf.block_average(argon_ratios_times[voltage][pulse], 10) for pulse in argon_ratios[voltage]] for x in
+                       range(len(peak_wav))]
+        pulse_length = [[pulse.replace('us', '') for pulse in argon_ratios[voltage]] for _ in range(len(peak_wav))]
+        wavelength = [[peak_wav[x] for _ in range(len(argon_ratios[voltage]))] for x in range(len(peak_wav))]
+        # color_vals = [colors.copy() for _ in range(len(peak_wav))]
+
+        ratio_vals_f = flatten_2D(ratio_vals)
+        ratio_times_f = flatten_2D(ratio_times)
+        pulse_length_f = flatten_2D(pulse_length)
+        wavelength_f = flatten_2D(wavelength)
+        colors_f = cmap(norm(wavelength_f))
+
+        line_kwargs_iter = linestyles.linelook_by(pulse_length_f, linestyles=True)
+        legend_kwargs = legend_linelooks(line_kwargs_iter, linestyle_labels=pulse_length_f, linestyle_title='W [us]')
+        for index in range(len(line_kwargs_iter)):
+            line_kwargs_iter[index]['color'] = colors_f[index]
+        t_save_loc = rf'{save_loc}{voltage}_ratio_time.pdf' if save_loc else None
+        plot.lines(ratio_times_f, ratio_vals_f, line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs,
+                   cbar_kwargs=t_cbar_kwargs, save_loc=t_save_loc, show=show1)
+
+        ratio_vals_s = ratio_vals[4] + ratio_vals[9]
+        ratio_vals_change_s = [x/x[0] for x in ratio_vals_s]
+        ratio_times_s = ratio_times[4] + ratio_times[9]
+        pulse_length_s = pulse_length[4] + pulse_length[9]
+        wavelength_s = [peak_wav[4]] * len(ratio_vals[4]) + [peak_wav[9]] * len(ratio_vals[9])
+
+        line_kwargs_iter = linestyles.linelooks_by(color_values=pulse_length_s, linestyle_values=wavelength_s, colors=width_colors)
+        legend_kwargs = linestyles.legend_linelooks(line_kwargs_iter, color_labels=pulse_length_s, color_title='W [us]',
+                                                    linestyle_labels=wavelength_s, linestyle_title='Wav [nm]')
+        plot_kwargs = {'ylabel': 'Relative intensity', 'xlabel': 'Time [min]'}
+        t_save_loc = rf'{save_loc}{voltage}_ratio_time_s.pdf' if save_loc else None
+        plot.lines(ratio_times_s, ratio_vals_s, line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs,
+                   save_loc=t_save_loc, show=show1, plot_kwargs=plot_kwargs, close=True)
+        t_save_loc = rf'{save_loc}{voltage}_ratio_time_s_l.pdf' if save_loc else None
+        plot.lines(ratio_times_s, ratio_vals_s, line_kwargs_iter=line_kwargs_iter, save_loc=t_save_loc, show=False,
+                   plot_kwargs=plot_kwargs, close=True)
+
+        plot_kwargs = {'ylabel': 'Relative intensity change', 'xlabel': 'Time [min]'}
+        t_save_loc = rf'{save_loc}{voltage}_ratio_time_change_s.pdf' if save_loc else None
+        plot.lines(ratio_times_s, ratio_vals_change_s, line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs,
+                   save_loc=t_save_loc, show=show1, plot_kwargs=plot_kwargs, close=True)
+        t_save_loc = rf'{save_loc}{voltage}_ratio_time_change_s_l.pdf' if save_loc else None
+        plot.lines(ratio_times_s, ratio_vals_change_s, line_kwargs_iter=line_kwargs_iter, save_loc=t_save_loc, show=False,
+                   plot_kwargs=plot_kwargs, close=True)
+
+        t_p = [pulse.replace('us', '') for pulse in pulse_lengths]*2
+        t_w = [peak_wav[4], peak_wav[9]]*len(pulse_lengths)
+        line_kwargs_iter = linestyles.linelooks_by(color_values=t_p, linestyle_values=t_w, colors=width_colors)
+        legend_kwargs = linestyles.legend_linelooks(line_kwargs_iter, color_labels=t_p, color_title='W [us]',
+                                                    linestyle_labels=t_w, linestyle_title='Wav [nm]')
+        t_save_loc = rf'{save_loc}ratio_time_s_legend.pdf' if save_loc else None
+        plot.export_legend(legend_kwargs, save_loc=t_save_loc)
 
         peak_intensities.append(peak_intensity)
         voltage_vals.append([voltage]*len(peak_wav))
@@ -264,27 +375,27 @@ def analyse_directory_argon_emission(data_loc, voltages, pulse_lengths, *, save_
 
         peak_intensity_norm_t_norm = [np.array(inten)/inten[0] for inten in peak_intensity_norm_t]
 
-        t_save_loc = rf'{save_loc}_{voltage}_total_energies.pdf' if save_loc else None
+        t_save_loc = rf'{save_loc}{voltage}_total_energies.pdf' if save_loc else None
         plot.lines(pulses, peak_intensity_norm_t_norm, colors=colors2, show=show1, close=not show1, save_loc=t_save_loc,
                    cbar_kwargs={'mappable': mappable2, 'label': 'Energy [eV]'})
 
         if index + 1 == len(argon_results):
             plot_kwargs = {'ylabel': 'Relative intensity', 'xlabel': 'Pulse width [us]', 'ylim': (0, 1.05)}
-            t_save_loc = rf'{save_loc}_total.pdf' if save_loc else None
+            t_save_loc = rf'{save_loc}total.pdf' if save_loc else None
             plot.errorbar(pulses, peak_intensity_start_norm, yerr=std_val, line_kwargs=line_kwargs, colors=colors, fig_ax=rel_intensity_total,
                           save_kwargs=save_kwargs, cbar_kwargs=t_cbar_kwargs, save_loc=t_save_loc, plot_kwargs=plot_kwargs,
                           show=show1, close=not show1)
             plot_kwargs = {'ylabel': 'Relative intensity', 'xlabel': 'Pulse width [us]', 'ylim': (0.6, 0.9)}
-            t_save_loc = rf'{save_loc}_total_zoom1.pdf' if save_loc else None
+            t_save_loc = rf'{save_loc}total_zoom1.pdf' if save_loc else None
             plot.errorbar(pulses, peak_intensity_norm_t, yerr=std_val, line_kwargs=line_kwargs, colors=colors,
-                          fig_ax=peak_intensity_start_norm, plot_kwargs=plot_kwargs, show=show1, close=not show1,
+                          fig_ax=rel_intensity_total_1, plot_kwargs=plot_kwargs, show=show1, close=not show1,
                           save_kwargs=save_kwargs, cbar_kwargs=t_cbar_kwargs, save_loc=t_save_loc)
             plot_kwargs = {'ylabel': 'Relative intensity', 'xlabel': 'Pulse width [us]', 'ylim': (0, 0.38)}
-            t_save_loc = rf'{save_loc}_total_zoom2.pdf' if save_loc else None
+            t_save_loc = rf'{save_loc}total_zoom2.pdf' if save_loc else None
             plot.errorbar(pulses, peak_intensity_norm_t, yerr=std_val, line_kwargs=line_kwargs, colors=colors,
-                          fig_ax=peak_intensity_start_norm, plot_kwargs=plot_kwargs, show=show1, close=not show1,
+                          fig_ax=rel_intensity_total_2, plot_kwargs=plot_kwargs, show=show1, close=not show1,
                           save_kwargs=save_kwargs, cbar_kwargs=t_cbar_kwargs, save_loc=t_save_loc)
-            t_save_loc = rf'{save_loc}_total_energies.pdf' if save_loc else None
+            t_save_loc = rf'{save_loc}total_energies.pdf' if save_loc else None
             plot.lines(pulses, peak_intensity_norm_t_norm, colors=colors2, line_kwargs=line_kwargs,
                        show=show1, close=not show1, fig_ax=peak_intensity_norm_plot, save_loc=t_save_loc,
                        cbar_kwargs={'mappable': mappable2, 'label': 'Energy [eV]'})
@@ -383,6 +494,11 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
 
     pulse_height = {}
     pulse_width = {}
+    rise_times = {}
+    raw_pulse_height = {}
+    raw_pulse_width = {}
+    raw_rise_times = {}
+    raw_timestamps = {}
 
     background_current = {}
     background_current_std = {}
@@ -391,6 +507,18 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
     background_current2 = {}
     background_current_std2 = {}
     background_current_time2 = {}
+
+    background_current3 = {}
+    background_current_std3 = {}
+    background_current_time3 = {}
+
+    background_current4 = {}
+    background_current_std4 = {}
+
+    power_val = {}
+    power_time = {}
+    power_avg_val = {}
+    power_avg_time = {}
 
     highest_current = {}
     lowest_current = {}
@@ -402,20 +530,36 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
         end_pulse[voltage] = {}
         pulse_height[voltage] = {}
         pulse_width[voltage] = {}
+        rise_times[voltage] = {}
+        raw_pulse_height[voltage] = {}
+        raw_pulse_width[voltage] = {}
+        raw_rise_times[voltage] = {}
+        raw_timestamps[voltage] = {}
         background_current[voltage] = {}
         background_current_std[voltage] = {}
         background_current_time[voltage] = {}
         background_current2[voltage] = {}
         background_current_std2[voltage] = {}
         background_current_time2[voltage] = {}
+        background_current3[voltage] = {}
+        background_current_std3[voltage] = {}
+        background_current_time3[voltage] = {}
+        background_current4[voltage] = {}
+        background_current_std4[voltage] = {}
         highest_current[voltage] = {}
         lowest_current[voltage] = {}
         time_current[voltage] = {}
+        power_val[voltage] = {}
+        power_avg_val[voltage] = {}
+        power_time[voltage] = {}
+        power_avg_time[voltage] = {}
+
         for pulse in pulse_lengths:
             loc = f'{data_loc}_{voltage}_{pulse}.hdf5'
             if not os.path.exists(loc):
                 continue
 
+            print(rf'{voltage}_{pulse}')
             data: Waveforms = read_hdf5(loc)['waveforms']
 
             wavs = MeasuredWaveforms.from_waveforms(data, channels)
@@ -428,6 +572,9 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
             voltage_vals = wavs.voltages
             time_offsets = wavs.time_offset
 
+            if len(current) == 0:
+                continue
+
             n = 20
             avg_current = npf.block_average(current, n)
             avg_voltage = npf.block_average(voltage_vals, n)
@@ -438,14 +585,32 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
 
             plot_kwargs = {'xlabel': 'Time [s]', 'ylabel': 'Energy [J]'}
             t_save_loc = save_loc2 + f'{voltage}_{pulse}_avg_energy.pdf' if save_loc2 else None
-            plot.lines(avg_time_offsets, avg_pulse_power, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show2, close=True)
+            plot.lines(avg_time_offsets-avg_time_offsets[0], avg_pulse_power, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show2, close=True)
 
-            plot_kwargs = {'xlabel': 'Time [s]', 'ylabel': 'Power [W]'}
-            colors, mappable = cbar.cbar_norm_colors(avg_time_offsets, 'turbo')
-            cbar_kwargs = {'label': 'Time [s]', 'mappable': mappable}
+            plot_kwargs = {'xlabel': r'Time [us]', 'ylabel': 'Power [W]'}
+            colors, mappable = cbar.cbar_norm_colors(avg_time_offsets/60, 'turbo')
+            cbar_kwargs = {'label': 'Time [min]', 'mappable': mappable}
             t_save_loc = save_loc + f'{voltage}_{pulse}_avg_power.pdf' if save_loc else None
-            plot.lines(avg_time, avg_power, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show2, close=True, colors=colors,
+            plot.lines((avg_time-avg_time[0])*1e6, avg_power, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show2, close=True, colors=colors,
                        cbar_kwargs=cbar_kwargs)
+
+            plot_kwargs = {'xlabel': r'Time [us]', 'ylabel': 'Current change [A]', 'xlim': (0, float(pulse.replace('us', '')) + 1)}
+            t_save_loc = save_loc2 + f'{voltage}_{pulse}_avg_current_change.pdf' if save_loc2 else None
+            t_offsets = npf.block_average(time_offsets[is_on][1:], 60)
+            colors, mappable = cbar.cbar_norm_colors((t_offsets-t_offsets[0])/60, 'turbo')
+            cbar_kwargs = {'label': 'Time [min]', 'mappable': mappable}
+            index = 0
+            t_vals = npf.block_average(time[is_on][1:], 60)*1e6
+            t_vals = t_vals - t_vals[:, index][:, None]
+            c_vals = npf.block_average(current[is_on][1:], 60)
+            c_vals = c_vals-c_vals[index]
+            plot.lines(t_vals[::-1], c_vals[::-1], save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show2,
+                       close=True, colors=colors[::-1], cbar_kwargs=cbar_kwargs)
+
+            power_time[voltage][pulse] = (time_offsets[is_on] - time_offsets[is_on][0])/60
+            power_val[voltage][pulse] = np.trapz(time[is_on], current[is_on]*voltage_vals[is_on], axis=1)
+            power_avg_time[voltage][pulse] = npf.block_average((time_offsets[is_on] - time_offsets[is_on][0])/60, n)
+            power_avg_val[voltage][pulse] = np.trapz(npf.block_average(time[is_on], n), npf.block_average(current[is_on]*voltage_vals[is_on], n), axis=1)
 
             on_current = current[is_on]
             middle = on_current.shape[0]//2
@@ -454,23 +619,54 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
             end_pulse[voltage][pulse] = (np.nanmean(time[is_on][-15:-5], axis=0), np.nanmean(on_current[-15:-5], axis=0))
 
             rise_time, pulse_length, height = wavs.fit_voltage()
-            mask = np.isfinite(rise_time)
-            pulse_height[voltage][pulse] = (np.average(height[mask][10:-5]), np.std(height[mask][10:-5]))
-            pulse_width[voltage][pulse] = (np.average(pulse_length[mask][10:-5]), np.std(pulse_length[mask][10:-5]))
+            rise_times[voltage][pulse] = np.mean(rise_time[is_on]), np.std(rise_time[is_on])
+            mask = np.isfinite(rise_time[is_on])
+            pulse_height[voltage][pulse] = (np.average(height[is_on][mask][10:-5]), np.std(height[is_on][mask][10:-5]))
+            pulse_width[voltage][pulse] = (np.average(pulse_length[is_on][mask][10:-5]), np.std(pulse_length[is_on][mask][10:-5]))
 
-            avg, std = wavs.background_current_averaging(float(pulse.replace('us', '')))
-            time_vals = wavs.time_offset[is_on]
-            background_current[voltage][pulse] = avg[is_on]
-            background_current_std[voltage][pulse] = std[is_on]
+            raw_pulse_height[voltage][pulse] = height[is_on]
+            raw_pulse_width[voltage][pulse] = pulse_length[is_on]
+            raw_rise_times[voltage][pulse] = rise_time[is_on]
+            raw_timestamps[voltage][pulse] = time_offsets[is_on]
+
+            avg_num = 20
+            # avg, std = wavs.background_current_averaging(on_mask=is_on)
+            time_vals = npf.block_average(wavs.time_offset[is_on], avg_num)
+            # background_current[voltage][pulse] = avg
+            # background_current_std[voltage][pulse] = std
+            if pulse.replace('us', '').strip() == '0.3':
+                start_offset = 0.125
+                end_offset = 0.125
+            else:
+                start_offset = 0.25
+                end_offset = 0.15
+
+            avg, std = wavs.background_current_averaging(start_offset=start_offset, end_offset=end_offset, on_mask=is_on, block_average=avg_num)
+            background_current[voltage][pulse] = avg
+            background_current_std[voltage][pulse] = std
             background_current_time[voltage][pulse] = time_vals - time_vals[0]
+
+            avg, std = wavs.background_current_averaging(on_mask=is_on, block_average=avg_num)
+            time_vals = wavs.time_offset[is_on]
+            time_vals = npf.block_average(time_vals, avg_num)
+            background_current3[voltage][pulse] = avg
+            background_current_std3[voltage][pulse] = std
+            background_current_time3[voltage][pulse] = time_vals - time_vals[0]
 
             plot_kwargs = {'xlabel': 'Time [s]', 'ylabel': 'Background current [A]'}
             t_save_loc = save_loc + f'{voltage}_{pulse}_background.pdf' if save_loc else None
             plot.errorrange(background_current_time[voltage][pulse], background_current[voltage][pulse], yerr=background_current_std[voltage][pulse], save_loc=t_save_loc,
                             plot_kwargs=plot_kwargs, show=show2, close=True)
 
+            plot_kwargs = {'xlabel': 'Time [s]', 'ylabel': 'Background current [A]'}
+            t_save_loc = save_loc + f'{voltage}_{pulse}_background2.pdf' if save_loc else None
+            plot.errorrange(background_current_time3[voltage][pulse], background_current3[voltage][pulse],
+                            yerr=background_current_std3[voltage][pulse], save_loc=t_save_loc,
+                            plot_kwargs=plot_kwargs, show=show2, close=True)
+
+            t_save_loc = save_loc2 + rf'{voltage}_{pulse}_bacground_fit' if save_loc2 else None
             avg_offset, back_curr_results, back_curr_std = wavs.background_current_fitting(float(pulse.replace('us', '')),
-                                                                                           save_loc=save_loc2)
+                                                                                           save_loc=t_save_loc)
             background_current2[voltage][pulse] = back_curr_results
             background_current_std2[voltage][pulse] = back_curr_std
             background_current_time2[voltage][pulse] = avg_offset
@@ -489,9 +685,9 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
                             yerr=background_current_std2[voltage][pulse], save_loc=t_save_loc,
                             plot_kwargs=plot_kwargs, show=show2, close=True, fig_ax=fig_ax)
 
-            highest_current[voltage][pulse] = np.nanmax(on_current, axis=0)[is_on]
-            lowest_current[voltage][pulse] = np.nanmin(on_current, axis=0)[is_on]
-            time_current[voltage][pulse] = time[is_on]
+            highest_current[voltage][pulse] = np.nanmax(on_current, axis=1)
+            lowest_current[voltage][pulse] = np.nanmin(on_current, axis=1)
+            time_current[voltage][pulse] = wavs.time_offset[is_on]
 
             t_save_loc = save_loc + f'{voltage}_{pulse}_highest_current.pdf' if save_loc else None
             plot_kwargs = {'xlabel': 'Time [s]', 'ylabel': 'Maximum current [A]'}
@@ -503,6 +699,9 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
                           save_loc=t_save_loc, plot_kwargs=plot_kwargs)
 
         pulses = list(first_pulse[voltage].keys())
+        if len(pulses) == 0:
+            warnings.warn(f"No pulses for voltage: {voltage}")
+            continue
         first_pulse_vals = [first_pulse[voltage][pulse] for pulse in pulses]
         middle_pulse_vals = [middle_pulse[voltage][pulse] for pulse in pulses]
         end_pulse_vals = [end_pulse[voltage][pulse] for pulse in pulses]
@@ -516,11 +715,11 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
 
         plot_kwargs = {'xlabel': 'Time [s]', 'ylabel': 'Current [A]'}
         t_save_loc = save_loc + f'{voltage}_first_pulse.pdf' if save_loc else None
-        plot.lines(first_pulse_time, first_pulse_current, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show)
+        plot.lines(first_pulse_time, first_pulse_current, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show, close=not show)
         t_save_loc = save_loc + f'{voltage}_middle_pulse.pdf' if save_loc else None
-        plot.lines(middle_pulse_time, middle_pulse_current, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show)
+        plot.lines(middle_pulse_time, middle_pulse_current, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show, close=not show)
         t_save_loc = save_loc + f'{voltage}_end_pulse.pdf' if save_loc else None
-        plot.lines(end_pulse_time, end_pulse_current, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show)
+        plot.lines(end_pulse_time, end_pulse_current, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show, close=not show)
 
         for name, func, dts in zip(('min', 'max'), (argmin, argmax), ((1e-7, 2e-7), (1e-7, 2e-7))):
             first_pulse_zoom_max = [zoom(time, current, dts, func) for time, current in zip(first_pulse_time, first_pulse_current)]
@@ -536,34 +735,40 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
 
             t_save_loc = save_loc + f'{voltage}_first_pulse_zoom_{name}.pdf' if save_loc else None
             plot.lines(first_pulse_time_zoom_max, first_pulse_vals_zoom_max, save_loc=t_save_loc, plot_kwargs=plot_kwargs, labels=pulses,
-                       show=show, close=True)
+                       show=show, close=not show)
             t_save_loc = save_loc + f'{voltage}_middle_pulse_zoom_{name}.pdf' if save_loc else None
             plot.lines(middle_pulse_time_zoom_max, middle_pulse_vals_zoom_max, save_loc=t_save_loc, plot_kwargs=plot_kwargs, labels=pulses,
-                       show=show, close=True)
+                       show=show, close=not show)
             t_save_loc = save_loc + f'{voltage}_end_pulse_zoom_{name}.pdf' if save_loc else None
             plot.lines(end_pulse_time_zoom_max, end_pulse_vals_zoom_max, save_loc=t_save_loc, plot_kwargs=plot_kwargs, labels=pulses,
-                       show=show, close=True)
+                       show=show, close=not show)
 
         pulse_height_vals = [pulse_height[voltage][pulse] for pulse in pulses]
         pulse_width_vals = [pulse_width[voltage][pulse] for pulse in pulses]
+        rise_time_vals = [rise_times[voltage][pulse] for pulse in pulses]
 
         pulse_height_val = [x[0] for x in pulse_height_vals]
         pulse_height_std = [x[1] for x in pulse_height_vals]
+        rise_time_val = [1e9*x[0] for x in rise_time_vals]
+        rise_time_std = [1e9*x[1] for x in rise_time_vals]
         pulse_width_val = [x[0]/float(val.replace('us', '')) for x, val in zip(pulse_width_vals, pulses)]
         pulse_width_std = [x[1]/float(val.replace('us', '')) for x, val in zip(pulse_width_vals, pulses)]
 
         p_val = [p.removesuffix('us') for p in pulses]
         plot_kwargs = {'xlabel': 'Pulse width', 'ylabel': 'Height [V]'}
         t_save_loc = save_loc + f'{voltage}_pulse_height.pdf' if save_loc else None
-        plot.errorbar(p_val, pulse_height_val, yerr=pulse_height_std, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show)
+        plot.errorbar(p_val, pulse_height_val, yerr=pulse_height_std, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show, close=not show)
         plot_kwargs = {'xlabel': 'Pulse width', 'ylabel': 'Width accuracy'}
         t_save_loc = save_loc + f'{voltage}_pulse_width.pdf' if save_loc else None
-        plot.errorbar(p_val, pulse_width_val, yerr=pulse_width_std, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show)
+        plot.errorbar(p_val, pulse_width_val, yerr=pulse_width_std, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show, close=not show)
+        plot_kwargs = {'xlabel': 'Pulse width', 'ylabel': 'Rise time [ns]'}
+        t_save_loc = save_loc + f'{voltage}_rise_time.pdf' if save_loc else None
+        plot.errorbar(p_val, rise_time_val, yerr=rise_time_std, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show, close=not show)
 
-        for background, background_std, background_time, name in zip((background_current, background_current2),
-                                                                     (background_current_std, background_current_std2),
-                                                                     (background_current_time, background_current_time2),
-                                                                     ('', '_fit')):
+        for background, background_std, background_time, name in zip((background_current, background_current2, background_current3),
+                                                                     (background_current_std, background_current_std2, background_current_std3),
+                                                                     (background_current_time, background_current_time2, background_current_time3),
+                                                                     ('', '_fit', '2'), strict=True):
             background_current_vals = [background[voltage][pulse] for pulse in pulses]
             background_current_std_vals = [background_std[voltage][pulse] for pulse in pulses]
             background_current_time_vals = [background_time[voltage][pulse] for pulse in pulses]
@@ -571,10 +776,10 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
             plot_kwargs = {'xlabel': 'Time [s]', 'ylabel': 'Background current [A]'}
             t_save_loc = save_loc + f'{voltage}_background{name}.pdf' if save_loc else None
             plot.errorrange(background_current_time_vals, background_current_vals, yerr=background_current_std_vals,
-                            save_loc=t_save_loc, plot_kwargs=plot_kwargs, labels=pulses, show=show)
+                            save_loc=t_save_loc, plot_kwargs=plot_kwargs, labels=pulses, show=show, close=not show)
 
         b_currents_rel = [background_current[voltage][pulse] - np.average(background_current[voltage][pulse][:10]) for pulse in pulses]
-        bt_currents = [background_current_time[voltage][pulse] for pulse in pulses]
+        bt_currents = [background_current_time[voltage][pulse] - background_current_time[voltage][pulse][0] for pulse in pulses]
 
         h_currents = [highest_current[voltage][pulse] for pulse in pulses]
         l_currents = [lowest_current[voltage][pulse] for pulse in pulses]
@@ -582,29 +787,32 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
         l_currents_rel = [lowest_current[voltage][pulse] - np.average(lowest_current[voltage][pulse][:10]) for pulse in pulses]
         h_currents_norm = [highest_current[voltage][pulse]/np.average(highest_current[voltage][pulse][:10]) for pulse in pulses]
         l_currents_norm = [lowest_current[voltage][pulse]/np.average(lowest_current[voltage][pulse][:10]) for pulse in pulses]
-        t_currents = [time_current[voltage][pulse] for pulse in pulses]
+        t_currents = [time_current[voltage][pulse] - time_current[voltage][pulse][0] for pulse in pulses]
 
         for name, currents in zip(('highest', 'lowest', 'highest_rel', 'lowest_rel', 'highest_norm', 'lowest_norm'),
                                   (h_currents, l_currents, h_currents_rel, l_currents_rel, h_currents_norm, l_currents_norm)):
             plot_kwargs = {'xlabel': 'Time [s]', 'ylabel': 'Current [A]'}
             t_save_loc = save_loc + f'{voltage}_peak_current_{name}.pdf' if save_loc else None
-            plot.lines(t_currents, currents, save_loc=t_save_loc, plot_kwargs=plot_kwargs, labels=pulses, show=show)
+            plot.lines(t_currents, currents, save_loc=t_save_loc, plot_kwargs=plot_kwargs, labels=pulses, show=show, close=not show)
 
         temp_times = bt_currents + t_currents + t_currents
         temp_currents = b_currents_rel + h_currents_rel + l_currents_rel
         labels = ['Background']*len(bt_currents) + ['Highest']*len(h_currents) + ['Lowest']*len(l_currents)
         pulse_vals = p_val*3
-        line_kwargs_iter = linestyles.linelooks_by(color_values=pulse_vals, linestyle_values=labels, linestyles=[':', '--', '-.'])
+        line_kwargs_iter = linestyles.linelooks_by(color_values=pulse_vals, linestyle_values=labels, linestyles=[':', '--', '-.'],
+                                                   colors=width_colors)
         legend_kwargs = linestyles.legend_linelooks(line_kwargs_iter, linestyle_labels=labels, color_labels=pulse_vals,
                                                     linestyle_title='Type', color_title='Pulse [us]')
         plot_kwargs = {'xlabel': 'Time [s]', 'ylabel': 'Current change [A]'}
         t_save_loc = save_loc + f'{voltage}_all_currents.pdf' if save_loc else None
         plot.lines(temp_times, temp_currents, save_loc=t_save_loc, plot_kwargs=plot_kwargs, line_kwargs_iter=line_kwargs_iter,
-                   legend_kwargs=legend_kwargs, show=show)
+                   legend_kwargs=legend_kwargs, show=show, close=not show)
 
     pulses = [list(first_pulse[voltage].keys()) for voltage in voltages]
     pulse_vals = flatten_2D(pulses)
+    pulse_vals = [p.removesuffix('us') for p in pulse_vals]
     voltage_vals = flatten_2D([[v]*len(pulse) for v, pulse in zip(voltages, pulses)])
+    voltage_vals = [v.removesuffix('kV') for v in voltage_vals]
 
     first_pulse_vals = [[first_pulse[voltage][pulse] for pulse in pulse_list] for voltage, pulse_list in zip(voltages, pulses)]
     middle_pulse_vals = [[middle_pulse[voltage][pulse] for pulse in pulse_list] for voltage, pulse_list in zip(voltages, pulses)]
@@ -617,21 +825,21 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
     end_pulse_time = [x[0]*1e6 for pulse_list in end_pulse_vals for x in pulse_list]
     end_pulse_current = [x[1] for pulse_list in end_pulse_vals for x in pulse_list]
 
-    p_vals = [p.removesuffix('us') for p in pulse_vals]
-    line_kwargs_iter = linestyles.linelooks_by(color_values=p_vals, linestyle_values=voltage_vals)
+    # p_vals = [p.removesuffix('us') for p in pulse_vals]
+    line_kwargs_iter = linestyles.linelooks_by(color_values=pulse_vals, linestyle_values=voltage_vals, colors=width_colors)
     legend_kwargs = linestyles.legend_linelooks(line_kwargs_iter, linestyle_labels=voltage_vals, color_labels=pulse_vals,
-                                                linestyle_title='Voltage', color_title='Pulse', show=show)
+                                                linestyle_title='H [kV]', color_title='W [us]')
 
     plot_kwargs = {'xlabel': 'Time [us]', 'ylabel': 'Current [A]'}
     t_save_loc = save_loc + f'first_pulse.pdf' if save_loc else None
     plot.lines(first_pulse_time, first_pulse_current, save_loc=t_save_loc, plot_kwargs=plot_kwargs,
-               line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, show=show)
+               line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, show=show, close=not show)
     t_save_loc = save_loc + f'middle_pulse.pdf' if save_loc else None
     plot.lines(middle_pulse_time, middle_pulse_current, save_loc=t_save_loc, plot_kwargs=plot_kwargs,
-               line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, show=show)
+               line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, show=show, close=not show)
     t_save_loc = save_loc + f'end_pulse.pdf' if save_loc else None
     plot.lines(end_pulse_time, end_pulse_current, save_loc=t_save_loc, plot_kwargs=plot_kwargs,
-               line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, show=show)
+               line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, show=show, close=not show)
 
     for name, func, dts in zip(('min', 'max'), (argmin, argmax), ((1e-7, 2e-7), (1e-7, 2e-7))):
         first_pulse_vals_zoom = [zoom(x[0], x[1], dts, func) for pulse_list in first_pulse_vals for x in pulse_list]
@@ -646,32 +854,41 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
 
         t_save_loc = save_loc + f'first_pulse_zoom_{name}.pdf' if save_loc else None
         plot.lines(first_pulse_time_zoom, first_pulse_vals_zoom, save_loc=t_save_loc, plot_kwargs=plot_kwargs,
-                   line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, show=show)
+                   line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, show=show, close=not show)
         t_save_loc = save_loc + f'middle_pulse_zoom_{name}.pdf' if save_loc else None
         plot.lines(middle_pulse_time_zoom, middle_pulse_vals_zoom, save_loc=t_save_loc,
-                   plot_kwargs=plot_kwargs, line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, show=show)
+                   plot_kwargs=plot_kwargs, line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, show=show, close=not show)
         t_save_loc = save_loc + f'end_pulse_zoom_{name}.pdf' if save_loc else None
         plot.lines(end_pulse_time_zoom, end_pulse_vals_zoom, save_loc=t_save_loc, plot_kwargs=plot_kwargs,
-                   line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, show=show)
+                   line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, show=show, close=not show)
 
-    for background, background_std, background_time, name in zip((background_current, background_current2),
-                                                                 (background_current_std, background_current_std2),
-                                                                 (background_current_time, background_current_time2),
-                                                                 ('', '_fit')):
+    for background, background_std, background_time, name in zip((background_current, background_current2, background_current3),
+                                                                 (background_current_std, background_current_std2, background_current_std3),
+                                                                 (background_current_time, background_current_time2, background_current_time3),
+                                                                 ('', '_fit', '2'), strict=True):
         background_current_total = [background[voltage][pulse] for voltage in voltages for pulse in background[voltage]]
         background_current_total_change = [x - x[0] for x in background_current_total]
         background_current_std_total = [background_std[voltage][pulse] for voltage in voltages for pulse in background_std[voltage]]
-        background_current_time_total = [background_time[voltage][pulse] for voltage in voltages for pulse in background_time[voltage]]
+        background_current_time_total = [background_time[voltage][pulse]/60 for voltage in voltages for pulse in background_time[voltage]]
 
-        plot_kwargs = {'xlabel': 'Time [s]', 'ylabel': 'Background current [A]'}
-        t_save_loc = save_loc + f'background{name}.pdf' if save_loc else None
+        plot_kwargs = {'xlabel': 'Time [min]', 'ylabel': 'Background current [A]'}
+        t_save_loc = save_loc + f'background_e{name}.pdf' if save_loc else None
         plot.errorrange(background_current_time_total, background_current_total, yerr=background_current_std_total,
                         save_loc=t_save_loc, plot_kwargs=plot_kwargs, line_kwargs_iter=line_kwargs_iter,
-                        legend_kwargs=legend_kwargs, show=show)
-        t_save_loc = save_loc + f'background_change{name}.pdf' if save_loc else None
+                        legend_kwargs=legend_kwargs, show=show, close=not show)
+        t_save_loc = save_loc + f'background{name}.pdf' if save_loc else None
+        plot.lines(background_current_time_total, background_current_total,
+                        save_loc=t_save_loc, plot_kwargs=plot_kwargs, line_kwargs_iter=line_kwargs_iter,
+                        legend_kwargs=legend_kwargs, show=show, close=not show)
+        plot_kwargs = {'xlabel': 'Time [min]', 'ylabel': 'Background current change [A]'}
+        t_save_loc = save_loc + f'background_change_e{name}.pdf' if save_loc else None
         plot.errorrange(background_current_time_total, background_current_total_change, yerr=background_current_std_total,
                         save_loc=t_save_loc, plot_kwargs=plot_kwargs, line_kwargs_iter=line_kwargs_iter,
-                        legend_kwargs=legend_kwargs, show=show)
+                        legend_kwargs=legend_kwargs, show=show, close=not show)
+        t_save_loc = save_loc + f'background_change{name}.pdf' if save_loc else None
+        plot.lines(background_current_time_total, background_current_total_change,
+                        save_loc=t_save_loc, plot_kwargs=plot_kwargs, line_kwargs_iter=line_kwargs_iter,
+                        legend_kwargs=legend_kwargs, show=show, close=not show)
 
     h_currents = [highest_current[voltage][pulse] for voltage in voltages for pulse in highest_current[voltage]]
     l_currents = [lowest_current[voltage][pulse] for voltage in voltages for pulse in lowest_current[voltage]]
@@ -679,24 +896,102 @@ def analyse_directory_pulse(data_loc, voltages, pulse_lengths, channels, save_lo
     l_currents_rel = [x - np.average(x[:10]) for x in l_currents]
     h_currents_norm = [x/np.average(x[:10]) for x in h_currents]
     l_currents_norm = [x/np.average(x[:10]) for x in l_currents]
-    t_currents = [time_current[voltage][pulse] for voltage in voltages for pulse in time_current[voltage]]
+    t_currents = [time_current[voltage][pulse]/60 for voltage in voltages for pulse in time_current[voltage]]
 
-    plot_kwargs = {'xlabel': 'Time [s]', 'ylabel': 'Current [A]'}
-    line_kwargs_iter = linestyles.linelooks_by(color_values=pulse_vals, linestyle_values=voltage_vals)
+    plot_kwargs = {'xlabel': 'Time [min]', 'ylabel': 'Current [A]'}
+    line_kwargs_iter = linestyles.linelooks_by(color_values=pulse_vals, linestyle_values=voltage_vals, colors=width_colors)
     legend_kwargs = linestyles.legend_linelooks(line_kwargs_iter, linestyle_labels=voltage_vals, color_labels=pulse_vals,
-                                                linestyle_title='Voltage [kV]', color_title='Pulse [us]')
+                                                linestyle_title='H [kV]', color_title='W [us]')
 
     for name, currents in zip(('highest', 'lowest', 'highest_rel', 'lowest_rel', 'highest_norm', 'lowest_norm'),
                                 (h_currents, l_currents, h_currents_rel, l_currents_rel, h_currents_norm, l_currents_norm)):
         t_save_loc = save_loc + f'peak_current_{name}.pdf' if save_loc else None
         plot.lines(t_currents, currents, save_loc=t_save_loc, plot_kwargs=plot_kwargs, line_kwargs_iter=line_kwargs_iter,
-                   legend_kwargs=legend_kwargs, show=show)
+                   legend_kwargs=legend_kwargs, show=show, close=not show)
+
+    for name, time, value in zip(('', 'avg'), (power_time, power_avg_time), (power_val, power_avg_val)):
+        power_total = [1000*value[voltage][pulse] for voltage in voltages for pulse in value[voltage]]
+        time_total = [time[voltage][pulse] for voltage in voltages for pulse in time[voltage]]
+        plot_kwargs = {'xlabel': 'Time [min]', 'ylabel': 'Pulse energy [mJ]'}
+        t_save_loc = save_loc + f'power_{name}.pdf' if save_loc else None
+        plot.lines(time_total, power_total, save_loc=t_save_loc, plot_kwargs=plot_kwargs, line_kwargs_iter=line_kwargs_iter,
+                   legend_kwargs=legend_kwargs, show=show, close=not show)
+
+    pulse_height_vals = [np.array([pulse_height[voltage][pulse] for pulse in pulse_height[voltage]]) for voltage in voltages]
+    pulse_width_vals = [np.array([pulse_width[voltage][pulse] for pulse in pulse_width[voltage]]) for voltage in voltages]
+    rise_time_vals = [np.array([rise_times[voltage][pulse] for pulse in rise_times[voltage]]) for voltage in voltages]
+    p_vals = [[pulse.removesuffix('us') for pulse in rise_times[voltage]] for voltage in voltages]
+    voltages = [v.removesuffix('kV') for v in voltages]
+
+    pulse_height_val = [x[:, 0] for x in pulse_height_vals]
+    pulse_height_std = [x[:, 1] for x in pulse_height_vals]
+    pulse_height_val_acc = [1e-3*x[:, 0] / np.array(val, dtype=float) for x, val in zip(pulse_height_vals, voltages)]
+    pulse_height_std_acc = [1e-3*x[:, 1] / np.array(val, dtype=float) for x, val in zip(pulse_height_vals, voltages)]
+    pulse_width_val = [1e6*x[:, 0] for x in pulse_width_vals]
+    pulse_width_std = [1e6*x[:, 1] for x in pulse_width_vals]
+    pulse_width_val_acc = [1e6*x[:, 0] / np.array(val, dtype=float) for x, val in zip(pulse_width_vals, p_vals)]
+    pulse_width_std_acc = [1e6*x[:, 1] / np.array(val, dtype=float) for x, val in zip(pulse_width_vals, p_vals)]
+    rise_time_val = [1e9*x[:, 0] for x in rise_time_vals]
+    rise_time_std = [1e9*x[:, 1] for x in rise_time_vals]
+    colors = ['k' for _ in range(len(pulse_height_val))]
+
+    # line_kwargs_iter = linestyles.linelooks_by(marker_values=voltages, color_values=voltages)
+    # legend_kwargs = linestyles.legend_linelooks(line_kwargs_iter, marker_labels=voltages, marker_title='H [kV]', no_linestyle=None)
+
+    line_kwargs_iter, legend_kwargs = legend_linelooks_combines(voltages, 'H [kV]', colors=True, markers=True)
+
+    plot_kwargs = {'xlabel': 'Pulse width [us]', 'ylabel': 'Pulse height [kV]'}
+    t_save_loc = save_loc + f'pulse_height.pdf' if save_loc else None
+    plot.errorbar(p_vals, pulse_height_val, yerr=pulse_height_std, save_loc=t_save_loc, plot_kwargs=plot_kwargs, show=show,
+                  colors=colors, close=not show, line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs)
+    plot_kwargs = {'xlabel': 'Pulse width [us]', 'ylabel': 'Relative height'}
+    t_save_loc = save_loc + f'pulse_height_acc.pdf' if save_loc else None
+    plot.errorbar(p_vals, pulse_height_val_acc, yerr=pulse_height_std_acc, save_loc=t_save_loc, plot_kwargs=plot_kwargs,
+                  colors=colors, show=show, close=not show, line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs)
+
+    plot_kwargs = {'xlabel': 'Pulse width [us]', 'ylabel': 'Pulse width [us]'}
+    t_save_loc = save_loc + f'pulse_width.pdf' if save_loc else None
+    plot.errorbar(p_vals, pulse_width_val, yerr=pulse_width_std, line_kwargs_iter=line_kwargs_iter, close=not show,
+                  legend_kwargs=legend_kwargs, show=show, plot_kwargs=plot_kwargs, save_loc=t_save_loc)
+    plot_kwargs = {'xlabel': 'Pulse width [us]', 'ylabel': 'Relative width'}
+    t_save_loc = save_loc + f'pulse_width_acc.pdf' if save_loc else None
+    plot.errorbar(p_vals, pulse_width_val_acc, yerr=pulse_width_std_acc, line_kwargs_iter=line_kwargs_iter, close=not show,
+                  legend_kwargs=legend_kwargs, show=show, plot_kwargs=plot_kwargs, save_loc=t_save_loc)
+
+    plot_kwargs = {'xlabel': 'Pulse width [us]', 'ylabel': 'Rise time [ns]'}
+    t_save_loc = save_loc + f'rise_time.pdf' if save_loc else None
+    plot.errorbar(p_vals, rise_time_val, yerr=rise_time_std, line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs,
+                  show=show, plot_kwargs=plot_kwargs, save_loc=t_save_loc, close=not show)
+
+    raw_timestamp = [(raw_timestamps[voltage][pulse]-raw_timestamps[voltage][pulse][0])/60 for voltage in raw_timestamps for pulse in raw_timestamps[voltage]]
+    raw_pulse_width = [1e6*raw_pulse_width[voltage][pulse] for voltage in raw_pulse_width for pulse in raw_pulse_width[voltage]]
+    raw_pulse_height = [raw_pulse_height[voltage][pulse] for voltage in raw_pulse_height for pulse in raw_pulse_height[voltage]]
+    raw_rise_time = [1e9*raw_rise_times[voltage][pulse] for voltage in raw_rise_times for pulse in raw_rise_times[voltage]]
+    relative_raw_pulse_width = [x/float(p) for x, p in zip(raw_pulse_width, pulse_vals)]
+    relative_raw_pulse_height = [1e-3*x/float(v) for x, v in zip(raw_pulse_height, voltage_vals)]
+
+    line_kwargs_iter = linestyles.linelooks_by(color_values=pulse_vals, colors=width_colors, linestyle_values=voltage_vals)
+    legend_kwargs = linestyles.legend_linelooks(line_kwargs_iter, marker_labels=voltage_vals, color_labels=pulse_vals,
+                                                marker_title='H [kV]', color_title='W [us]')
+    plot_kwargs = {'xlabel': 'Time [min]', 'ylabel': 'Relative width'}
+    t_save_loc = save_loc + f'raw_pulse_width.pdf' if save_loc else None
+    plot.lines(raw_timestamp, relative_raw_pulse_width, line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs,
+               plot_kwargs=plot_kwargs, show=show, save_loc=t_save_loc, close=not show)
+    plot_kwargs = {'xlabel': 'Time [min]', 'ylabel': 'Relative height'}
+    t_save_loc = save_loc + f'raw_pulse_height.pdf' if save_loc else None
+    plot.lines(raw_timestamp, relative_raw_pulse_height, line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs,
+               plot_kwargs=plot_kwargs, show=show, save_loc=t_save_loc, close=not show)
+    plot_kwargs = {'xlabel': 'Time [min]', 'ylabel': 'Rise time [ns]'}
+    t_save_loc = save_loc + f'raw_rise_time.pdf' if save_loc else None
+    plot.lines(raw_timestamp, raw_rise_time, line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs,
+               plot_kwargs=plot_kwargs, show=show, save_loc=t_save_loc, close=not show)
 
 
-
-def emission_ranges(data_loc, voltages, pulse_lengths, wavelength_ranges=((270, 450), (654, 659), (690, 860)), *,
+def emission_ranges(data_loc, voltages, pulse_lengths, labels, wavelength_ranges=((270, 450), (654, 659), (690, 860)), *,
                     save_loc1=None, save_loc2=None, save_loc3=None, save_kwargs1=None, save_kwargs2=None, save_kwargs3=None,
-                    show1=True, show2=True, show3=False):
+                    show1=False, show2=False, show3=False, peaks:tuple[tuple[float, ...], ...]=None, distance=3):
+    if len(labels) != len(wavelength_ranges):
+        raise ValueError("`labels` must have the same length as `wavelength_ranges`")
     intensities_total = {}
     times_total = {}
     intensities_total_avg = {}
@@ -724,12 +1019,25 @@ def emission_ranges(data_loc, voltages, pulse_lengths, wavelength_ranges=((270, 
             is_on_kwargs = {'wavelength_range': wavelength_ranges, 'relative_threshold': 0.3}
             data = data.remove_background_interp_off(is_on_kwargs)
             is_on = data.is_on(**is_on_kwargs)
-
+            # last_idx = len(is_on) - np.argwhere(np.diff(is_on[::-1].astype(int)) == 1)[0][0] - 1
+            # is_on[last_idx] = False
             intensities = []
-            for wavelength_range in wavelength_ranges:
-                mask = (data.spectrum.wavelengths > wavelength_range[0]) & (data.spectrum.wavelengths < wavelength_range[1])
-                intensity = data.spectrum.intensities[is_on][:, mask]
-                intensities.append(np.average(intensity, axis=1))
+            if peaks is not None:
+                for peak in peaks:
+                    _, _, intens = data.peak_loc_intensities_with_time(peak, is_on_kwargs=is_on_kwargs, distance=distance)
+                    mask = intens > 0
+                    intensities.append(np.nanmean(intens, axis=0, where=mask))
+            else:
+                for wavelength_range in wavelength_ranges:
+                    if isinstance(wavelength_range[0], tuple):
+                        new_data = data.spectrum.wavelength_ranges(*wavelength_range)
+                    else:
+                        new_data = data.spectrum.wavelength_ranges(wavelength_range)
+                    intensity = new_data.intensities[is_on]
+                    intensities.append(np.average(intensity, axis=1))
+                # mask = (data.spectrum.wavelengths > wavelength_range[0]) & (data.spectrum.wavelengths < wavelength_range[1])
+                # intensity = data.spectrum.intensities[is_on][:, mask]
+                # intensities.append(np.average(intensity, axis=1))
 
             intensities = np.array(intensities)
             intensities_total[voltage][pulse] = intensities
@@ -745,9 +1053,9 @@ def emission_ranges(data_loc, voltages, pulse_lengths, wavelength_ranges=((270, 
             intensity_change[voltage][pulse] = (end_inten - start_inten)/start_inten
             intensity_change_std[voltage][pulse] = abs(intensity_change[voltage][pulse])*np.sqrt((end_std/end_inten)**2 + (start_std/start_inten)**2)
 
-            line_kwargs = linestyles.linelook_by(wavelength_ranges, colors=True, linestyles=True)
+            line_kwargs = linestyles.linelook_by(labels, colors=True, linestyles=True)
             plot_kwargs = {'ylabel': 'Intensity [A.U.]', 'xlabel': 'Time [min]'}
-            labels = [f'{wavelength_range[0]}-{wavelength_range[1]}' for wavelength_range in wavelength_ranges]
+            # labels = [f'{wavelength_range[0]}-{wavelength_range[1]}' for wavelength_range in wavelength_ranges]
 
             t_save_loc = f'{save_loc3}{voltage}_{pulse}.pdf' if save_loc3 else None
             plot.lines(times_total[voltage][pulse], intensities_total[voltage][pulse], line_kwargs_iter=line_kwargs,
@@ -760,21 +1068,74 @@ def emission_ranges(data_loc, voltages, pulse_lengths, wavelength_ranges=((270, 
 
         pulse_vals = list(intensities_total[voltage].keys())
         pulses = np.repeat(list(intensities_total[voltage].keys()), len(wavelength_ranges))
+        pulses = [pulse.removesuffix('us') for pulse in pulses]
         wav_ranges = np.tile([f'{wavelength_range[0]}-{wavelength_range[1]}' for wavelength_range in wavelength_ranges], len(pulse_vals))
         intensities = [x for values in intensities_total[voltage].values() for x in values]
         intensities_norm = [intensity/max(intensity) for intensity in intensities]
         times = [[x for x in values] for values in times_total[voltage].values() for _ in range(len(wavelength_ranges))]
 
-        line_kwargs_iter = linelooks_by(color_values=pulses, linestyle_values=wav_ranges)
-        legend_kwargs = legend_linelooks(line_kwargs_iter, color_labels=pulses, linestyle_labels=wav_ranges)
+        tiled_labels = np.tile(labels, len(pulse_vals))
+        line_kwargs_iter = linelooks_by(color_values=pulses, linestyle_values=tiled_labels, colors=width_colors, linestyles=species_style)
+        legend_kwargs = legend_linelooks(line_kwargs_iter, color_labels=pulses, linestyle_labels=tiled_labels,
+                                         color_title='W [us]', linestyle_title='Species')
+
+        mask = [np.average(val) > 50 for val in intensities]
+        intensities_norm_ma = [val for val, ma in zip(intensities_norm, mask) if ma]
+        times_mask = [val for val, ma in zip(times, mask) if ma]
+        line_kwargs_iter_ma = [val for val, ma in zip(line_kwargs_iter, mask) if ma]
 
         plot_kwargs = {'ylabel': 'Intensity [A.U.]', 'xlabel': 'Time [min]'}
         t_save_loc = f'{save_loc2}{voltage}.pdf' if save_loc2 else None
         plot.lines(times, intensities, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
                    legend_kwargs=legend_kwargs, show=show2, close=not show2, save_kwargs=save_kwargs2)
         t_save_loc = f'{save_loc2}{voltage}_norm.pdf' if save_loc2 else None
-        plot.lines(times, intensities_norm, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
+        plot.lines(times, intensities_norm, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs,
+                   save_loc=t_save_loc, legend_kwargs=legend_kwargs, show=show2, close=not show2, save_kwargs=save_kwargs2)
+        t_save_loc = f'{save_loc2}{voltage}_norm_masked.pdf' if save_loc2 else None
+        plot.lines(times_mask, intensities_norm_ma, line_kwargs_iter=line_kwargs_iter_ma, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
                    legend_kwargs=legend_kwargs, show=show2, close=not show2, save_kwargs=save_kwargs2)
+
+        t_save_loc = f'{save_loc2}{voltage}_l.pdf' if save_loc2 else None
+        plot.lines(times, intensities, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
+                   show=show2, close=not show2, save_kwargs=save_kwargs2)
+        t_save_loc = f'{save_loc2}{voltage}_norm_l.pdf' if save_loc2 else None
+        plot.lines(times, intensities_norm, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs,
+                   save_loc=t_save_loc, show=show2, close=not show2, save_kwargs=save_kwargs2)
+        t_save_loc = f'{save_loc2}{voltage}_norm_masked_l.pdf' if save_loc2 else None
+        plot.lines(times_mask, intensities_norm_ma, line_kwargs_iter=line_kwargs_iter_ma, plot_kwargs=plot_kwargs,
+                   save_loc=t_save_loc, show=show2, close=not show2, save_kwargs=save_kwargs2)
+
+        plot_kwargs = {'ylabel': 'Intensity [A.U.]', 'xlabel': 'Time [min]'}
+        times_avg = [npf.block_average(np.array(t), 10) for t in times]
+        times_avg_ma = [npf.block_average(np.array(t), 10) for t in times_mask]
+        intensities_avg = [npf.block_average(np.array(intensity), 10) for intensity in intensities]
+        intensities_norm_avg = [npf.block_average(np.array(t), 10) for t in intensities_norm]
+        intensities_norm_avg_ma = [npf.block_average(np.array(t), 10) for t in intensities_norm_ma]
+
+        t_save_loc = f'{save_loc2}{voltage}_avg.pdf' if save_loc2 else None
+        plot.lines(times_avg, intensities_avg, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
+                   legend_kwargs=legend_kwargs, show=show2, close=not show2, save_kwargs=save_kwargs2)
+        t_save_loc = f'{save_loc2}{voltage}_norm_avg.pdf' if save_loc2 else None
+        plot.lines(times_avg, intensities_norm_avg, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
+                   legend_kwargs=legend_kwargs, show=show2, close=not show2, save_kwargs=save_kwargs2)
+        t_save_loc = f'{save_loc2}{voltage}_norm_avg_masked.pdf' if save_loc2 else None
+        plot.lines(times_avg_ma, intensities_norm_avg_ma, line_kwargs_iter=line_kwargs_iter_ma, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
+                   legend_kwargs=legend_kwargs, show=show2, close=not show2, save_kwargs=save_kwargs2)
+
+        t_save_loc = f'{save_loc2}{voltage}_avg_l.pdf' if save_loc2 else None
+        plot.lines(times_avg, intensities_avg, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
+                   show=show2, close=not show2, save_kwargs=save_kwargs2)
+        t_save_loc = f'{save_loc2}{voltage}_norm_avg_l.pdf' if save_loc2 else None
+        plot.lines(times_avg, intensities_norm_avg, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs,
+                   save_loc=t_save_loc, show=show2, close=not show2, save_kwargs=save_kwargs2)
+        t_save_loc = f'{save_loc2}{voltage}_norm_avg_masked_l.pdf' if save_loc2 else None
+        plot.lines(times_avg_ma, intensities_norm_avg_ma, line_kwargs_iter=line_kwargs_iter_ma, plot_kwargs=plot_kwargs,
+                   save_loc=t_save_loc, show=show2, close=not show2, save_kwargs=save_kwargs2)
+
+    p_vals = [pulse.removesuffix('us') for pulse in pulse_lengths]
+    _, legend_kwargs = legend_linelooks_by(color_labels=p_vals, linestyle_labels=labels, color_title='W [us]', linestyle_values=species_style,
+                                           linestyle_title='Species', sort=False, color_values=width_colors)
+    plot.export_legend(legend_kwargs, save_loc=f'{save_loc2}legend.pdf')
 
     intensities_avg = [[intensities_total_avg[voltage][pulse] for pulse in intensities_total_avg[voltage]] for voltage in voltages]
     intensities_std = [[intensities_total_std[voltage][pulse] for pulse in intensities_total_std[voltage]] for voltage in voltages]
@@ -802,51 +1163,89 @@ def emission_ranges(data_loc, voltages, pulse_lengths, wavelength_ranges=((270, 
 
     pulses = [[pulse.removesuffix('us') for pulse in intensities_total_avg[voltage].keys()] for voltage in voltages]
 
+    voltages = [v.removesuffix('kV') for v in voltages]
     plot_kwargs = {'ylabel': 'Intensity [A.U.]', 'xlabel': 'Pulse length [us]'}
-    line_styles = linestyles.linelook_by(voltages, linestyles=True)
+    line_styles = linestyles.linelooks_by(linestyle_values=voltages, linestyles=True)
     line_styles = [l['linestyle'] for l in line_styles]
 
-    wav_range_vals = [f'{wavelength_range[0]}-{wavelength_range[1]}' for wavelength_range in wavelength_ranges]
-    colors = linestyles.linelook_by(wav_range_vals, colors=True)
+    colors = linestyles.linelooks_by(color_values=labels, colors=True)
     colors = [c['color'] for c in colors]
 
-    legend_kwargs = legend_linelooks_by(color_labels=wav_range_vals, linestyle_labels=voltages,
+    _, legend_kwargs = legend_linelooks_by(color_labels=labels, linestyle_labels=voltages, color_title='Emission', linestyle_title='H [kV]',
                                         color_values=colors, linestyle_values=line_styles, sort=False)
 
-    t_save_loc = f'{save_loc1}total.pdf' if save_loc1 else None
-    plot1 = plot.lines(pulse_lengths, np.full(len(pulse_lengths), np.nan), show=False, close=False)
-    for pulse, value, value_std, linestyle in zip(pulses, intensities_avg_t, intensities_std_t, line_styles, strict=True):
-        line_kwargs = {'linestyle': linestyle}
-        plot1 = plot.errorbar(pulse, value, yerr=value_std, colors=colors, close=False, show=False, fig_ax=plot1, line_kwargs=line_kwargs)
-    plot.lines([], [], plot_kwargs=plot_kwargs, save_loc=t_save_loc, save_kwargs=save_kwargs1, show=show1,
-               close=not show1, fig_ax=plot1, legend_kwargs=legend_kwargs)
+    present_pulses = sorted(list(set((p for pulse in pulses for p in pulse))), key=lambda x: float(x))
+    mask = [[intensities_total_avg[voltage][pulse] > 50 for pulse in intensities_total_avg[voltage]] for voltage in intensities_total_avg]
+    mask_t = [list(map(list, zip(*values))) for values in mask]
 
-    t_save_loc = f'{save_loc1}total_norm.pdf' if save_loc1 else None
-    plot2 = plot.lines(pulse_lengths, np.full(len(pulse_lengths), np.nan), show=False, close=False)
-    for pulse, value, value_std, linestyle in zip(pulses, intensities_norm, intensities_norm_std, line_styles, strict=True):
-        line_kwargs = {'linestyle': linestyle}
-        plot2 = plot.errorbar(pulse, value, yerr=value_std, colors=colors, close=False, show=False, fig_ax=plot2, line_kwargs=line_kwargs)
-    plot.lines([], [], plot_kwargs=plot_kwargs, save_loc=t_save_loc, save_kwargs=save_kwargs1, show=show1,
-               close=not show1, fig_ax=plot2, legend_kwargs=legend_kwargs)
+    def apply_mask_2D(value, mask):
+        return [[val for val, ma in zip(v, m, strict=True) if ma] for v, m in zip(value, mask, strict=True)]
 
-    t_save_loc = f'{save_loc1}total_norm2.pdf' if save_loc1 else None
-    plot3 = plot.lines(pulse_lengths, np.full(len(pulse_lengths), np.nan), show=False, close=False)
-    for pulse, value, value_std, linestyle in zip(pulses, intensities_norm2, intensities_norm_std2, line_styles, strict=True):
-        line_kwargs = {'linestyle': linestyle}
-        plot3 = plot.errorbar(pulse, value, yerr=value_std, colors=colors, close=False, show=False, fig_ax=plot3,
-                              line_kwargs=line_kwargs)
-    plot.lines([], [], plot_kwargs=plot_kwargs, save_loc=t_save_loc, save_kwargs=save_kwargs1, show=show1,
-               close=not show1, fig_ax=plot3, legend_kwargs=legend_kwargs)
+    for name, data_vals, data_std, ylabel, lims in zip(
+            ('total', 'total_norm', 'total_norm2', 'total_ratio'),
+            (intensities_avg_t, intensities_norm, intensities_norm2, ratio_t),
+            (intensities_std_t, intensities_norm_std, intensities_norm_std2, ratio_std_t),
+            ['Intensity [A.U.]'] + ['Relative intensity [A.U.]']*2 + ['Relative intensity change [A.U.]'],
+            [(None, None)] + [(0, 1.1)]*2 + [(None, None)], strict=True):
+        t_save_loc = f'{save_loc1}{name}.pdf' if save_loc1 else None
+        plot1 = plot.lines(present_pulses, np.full(len(present_pulses), np.nan), show=False, close=False)
+        plot2 = plot.lines(present_pulses, np.full(len(present_pulses), np.nan), show=False, close=False)
+        for pulse, value, value_std, linestyle, m in zip(pulses, data_vals, data_std, line_styles, mask_t, strict=True):
+            line_kwargs = {'linestyle': linestyle}
+            plot1 = plot.errorbar(pulse, value, yerr=value_std, colors=colors, close=False, show=False, fig_ax=plot1,
+                                  line_kwargs=line_kwargs)
+            pulses_vals = [pulse.copy() for _ in range(len(value))]
+            plot2 = plot.errorbar(apply_mask_2D(pulses_vals, m), apply_mask_2D(value, m), yerr=apply_mask_2D(value_std, m),
+                                  colors=colors, close=False, show=False, fig_ax=plot2, line_kwargs=line_kwargs)
+        plot_kwargs['ylabel'] = ylabel
+        plot_kwargs['ylim'] = lims
+        plot.lines([], [], plot_kwargs=plot_kwargs, save_loc=t_save_loc.replace('.pdf', '_l.pdf'),
+                   save_kwargs=save_kwargs1, show=False, close=False, fig_ax=plot1)
+        plot.lines([], [], plot_kwargs=plot_kwargs, save_loc=t_save_loc.replace('.pdf', '_masked_l.pdf'),
+                   save_kwargs=save_kwargs1, show=False, close=False, fig_ax=plot2)
+        plot.lines([], [], plot_kwargs=plot_kwargs, save_loc=t_save_loc, save_kwargs=save_kwargs1, show=show1,
+                   close=not show1, fig_ax=plot1, legend_kwargs=legend_kwargs)
+        plot.lines([], [], plot_kwargs=plot_kwargs, save_loc=t_save_loc.replace('.pdf', '_masked.pdf'),
+                   save_kwargs=save_kwargs1, show=show1, close=not show1, fig_ax=plot2, legend_kwargs=legend_kwargs)
+    plot.export_legend(legend_kwargs, save_loc=f'{save_loc1}legend.pdf' if save_loc1 else None)
 
-    plot_kwargs['ylabel'] = 'Relative intensity change'
-    t_save_loc = f'{save_loc1}total_ratio.pdf' if save_loc1 else None
-    plot3 = plot.lines(pulse_lengths, np.full(len(pulse_lengths), np.nan), show=False, close=False)
-    for pulse, value, value_std, linestyle in zip(pulses, ratio_t, ratio_std_t, line_styles, strict=True):
-        line_kwargs = {'linestyle': linestyle}
-        plot3 = plot.errorbar(pulse, value, yerr=value_std, colors=colors, close=False, show=False, fig_ax=plot3,
-                              line_kwargs=line_kwargs)
-    plot.lines([], [], plot_kwargs=plot_kwargs, save_loc=t_save_loc, save_kwargs=save_kwargs1, show=show1,
-               close=not show1, fig_ax=plot3, legend_kwargs=legend_kwargs)
+    values = [[[intensities_total_avg[voltage][pulse][x] for pulse in intensity_change[voltage]] for voltage in intensity_change] for x in range(len(wavelength_ranges))]
+    stds = [[[intensities_total_std[voltage][pulse][x] for pulse in intensity_change[voltage]] for voltage in intensity_change] for x in range(len(wavelength_ranges))]
+    voltages = [[[voltage for _ in intensity_change[voltage]] for voltage in intensity_change] for _ in range(len(wavelength_ranges))]
+    pulses = [[[pulse.removesuffix('us') for pulse in intensity_change[voltage]] for voltage in intensity_change] for _ in range(len(wavelength_ranges))]
+
+    def extract(data, along):
+        indexer = {}
+        out = []
+        for al, dat in zip(along, data):
+            for i, (a, d) in enumerate(zip(al, dat)):
+                if a not in indexer:
+                    indexer[a] = len(indexer)
+                    out.append(list())
+                out[indexer[a]].append(d)
+        return out
+
+    wavs = [labels[i] for i, (v, p) in enumerate(zip(values, pulses)) for _ in extract(v, p)]
+    pulses_t = [x[0] for v in pulses for x in extract(v, v)]
+    values_t = [x for v, p in zip(values, pulses) for x in extract(v, p)]
+    values_t_norm = [np.array(x)/max(x) for x in values_t]
+    stds_t = [x for v, p in zip(stds, pulses) for x in extract(v, p)]
+    stds_t_norm = [np.array(x)/max(v) for v, x in zip(values_t, stds_t)]
+    voltages_t = [[y.removesuffix('kV') for y in x] for v, p in zip(voltages, pulses) for x in extract(v, p)]
+
+    line_kwargs_iter = linelooks_by(color_values=pulses_t, linestyle_values=wavs, colors=width_colors, linestyles=True)
+    legend_kwargs = legend_linelooks(line_kwargs_iter, color_labels=pulses_t, linestyle_labels=wavs, color_title='W [us]', linestyle_title='Species')
+
+    plot_kwargs = {'xlabel': 'Pulse height [kV]', 'ylabel': 'Relative intensity [A.U.]'}
+    t_save_loc = f'{save_loc1}emission_with_voltage.pdf' if save_loc1 else None
+    plot.lines(voltages_t, values_t_norm, line_kwargs_iter=line_kwargs_iter, legend_kwargs=legend_kwargs, plot_kwargs=plot_kwargs,
+               save_loc=t_save_loc, show=show1, close=not show1, save_kwargs=save_kwargs1)
+    t_save_loc = f'{save_loc1}emission_with_voltage_l.pdf' if save_loc1 else None
+    plot.lines(voltages_t, values_t_norm, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs,
+               save_loc=t_save_loc, show=False, close=True, save_kwargs=save_kwargs1)
+    t_save_loc = f'{save_loc1}emission_with_voltage_legend.pdf' if save_loc1 else None
+    plot.export_legend(legend_kwargs, save_loc=t_save_loc)
+
 
 
 def emission_peaks(data_loc, voltages, pulse_lengths, wavelength_peaks={'Ha': 656.3, 'Ar': 763.5, 'OH': 309, 'N2': 337, 'O': 777.5}, *,
@@ -921,7 +1320,7 @@ def emission_peaks(data_loc, voltages, pulse_lengths, wavelength_peaks={'Ha': 65
         intensities_norm3 = [x/np.nanmax(x) for x in intensities_norm2]
         times = [[x for x in values] for values in times_total[voltage].values() for _ in range(len(peak_wavelengths))]
 
-        line_kwargs_iter = linelooks_by(color_values=pulses, linestyle_values=label_vals)
+        line_kwargs_iter = linelooks_by(color_values=pulses, linestyle_values=label_vals, colors=width_colors)
         legend_kwargs = legend_linelooks(line_kwargs_iter, color_labels=pulses, linestyle_labels=label_vals)
 
         plot_kwargs = {'ylabel': 'Intensity [A.U.]', 'xlabel': 'Time [min]'}
@@ -974,14 +1373,16 @@ def emission_peaks(data_loc, voltages, pulse_lengths, wavelength_peaks={'Ha': 65
     line_styles = linestyles.linelook_by(voltages, linestyles=True)
     line_styles = [l['linestyle'] for l in line_styles]
 
-    colors = linestyles.linelook_by(labels, colors=True)
+    colors = linestyles.linelook_by(labels, colors=width_colors)
     colors = [c['color'] for c in colors]
 
-    legend_kwargs = legend_linelooks_by(color_labels=labels, linestyle_labels=voltages,
-                                        color_values=colors, linestyle_values=line_styles, sort=False)
+    _, legend_kwargs = legend_linelooks_by(color_labels=labels, linestyle_labels=voltages, color_values=colors,
+                                           linestyle_values=line_styles, sort=False)
+
+    print(pulse_lengths)
 
     t_save_loc = f'{save_loc1}total.pdf' if save_loc1 else None
-    plot1 = plot.lines(pulse_lengths, np.full(len(pulse_lengths), np.nan), show=False, close=False)
+    plot1 = plot.lines(pulse_lengths, [None for _ in pulse_lengths], show=False, close=False)
     for pulse, value, value_std, linestyle in zip(pulses, intensities_avg_t, intensities_std_t, line_styles, strict=True):
         line_kwargs = {'linestyle': linestyle}
         plot1 = plot.errorbar(pulse, value, yerr=value_std, colors=colors, close=False, show=False, fig_ax=plot1, line_kwargs=line_kwargs)
@@ -1311,3 +1712,185 @@ def analyse_directory_H_alpha(data_loc, voltages, pulse_lengths, *, save_loc1=No
     t_save_loc = rf'{save_loc1}intensity.pdf' if save_loc1 else None
     plot.errorrange(pulses_total, intensity_total, labels=voltages, yerr=intensity_total_std, save_loc=t_save_loc, save_kwargs=save_kwargs1, plot_kwargs=plot_kwargs3,
                     show=show1, close=not show1, line_kwargs_iter=line_kwargs_iter)
+
+
+def analyse_directory_conductivity(data_loc, voltages, pulse_lengths, *, save_loc=None, show=False, align='start',
+                                   end_time=2000, start_time=120):
+    time_vals = {}
+    conductivity_vals = {}
+    temp_vals = {}
+
+    for voltage in voltages:
+        time_vals[voltage] = {}
+        conductivity_vals[voltage] = {}
+        temp_vals[voltage] = {}
+
+        for pulse in pulse_lengths:
+            loc = f'{data_loc}_{voltage}_{pulse}.hdf5'
+            if not os.path.exists(loc):
+                continue
+
+            data = read_hdf5(loc)
+
+            try:
+                conductivity = data['conductivity']
+            except KeyError:
+                continue
+
+            if len(conductivity[0]) == 0:
+                continue
+
+            if align == 'start':
+                time_vals[voltage][pulse] = (conductivity[0] - conductivity[0][0] - start_time)/60
+            elif align == 'end':
+                time_vals[voltage][pulse] = (conductivity[0] - conductivity[0][-1] + end_time)/60
+                if time_vals[voltage][pulse][0] > 0:
+                    time_vals[voltage][pulse] = time_vals[voltage][pulse] - time_vals[voltage][pulse][0]
+            else:
+                raise ValueError(rf'Invalid alignment: {align}; must be either "start" or "end"')
+            conductivity_vals[voltage][pulse] = conductivity[1]
+            temp_vals[voltage][pulse] = conductivity[2]
+
+    voltages_total = [voltage.removesuffix('kV') for voltage in voltages for _ in time_vals[voltage].keys()]
+    pulses_total = [p.removesuffix('us') for voltage in voltages for p in time_vals[voltage].keys()]
+
+    time_total = [time_vals[voltage][pulse] for voltage in voltages for pulse in time_vals[voltage].keys()]
+    arg_sorter = [np.argsort(x) for x in time_total]
+    time_total = [x[y] for x, y in zip(time_total, arg_sorter)]
+    conductivity_total = [conductivity_vals[voltage][pulse] for voltage in voltages for pulse in time_vals[voltage].keys()]
+    conductivity_total = [x[y] for x, y in zip(conductivity_total, arg_sorter)]
+    temperature_total = [temp_vals[voltage][pulse] for voltage in voltages for pulse in time_vals[voltage].keys()]
+    temperature_total = [x[y] for x, y in zip(temperature_total, arg_sorter)]
+
+    line_kwargs_iter = linestyles.linelooks_by(color_values=pulses_total, linestyle_values=voltages_total, colors=width_colors, linestyles=True)
+    legend_kwargs = legend_linelooks(line_kwargs_iter, color_labels=pulses_total, linestyle_labels=voltages_total,
+                                     color_title='W [us]', linestyle_title='H [kV]')
+
+    plot_kwargs = {'ylabel': r'Conductivity [uS/cm]', 'xlabel': 'Time [min]', 'xlim': (0, None)}
+    t_save_loc = f'{save_loc}conductivity.pdf' if save_loc else None
+    plot.lines(time_total, conductivity_total, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
+               legend_kwargs=legend_kwargs, show=show, close=True)
+
+    plot_kwargs = {'ylabel': r'Temperature [$^o$C]', 'xlabel': 'Time [min]', 'xlim': (0, None)}
+    t_save_loc = f'{save_loc}temperature.pdf' if save_loc else None
+    plot.lines(time_total, temperature_total, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
+               legend_kwargs=legend_kwargs, show=show, close=True)
+
+    plot_kwargs = {'ylabel': r'Temperature change [$\Delta ^{\circ}$C]', 'xlabel': 'Time [min]', 'xlim': (0, None)}
+    t_save_loc = f'{save_loc}temperature_change.pdf' if save_loc else None
+    temperature_change = [temps - temps[np.argmin(t**2)] for temps, t in zip(temperature_total, time_total)]
+    plot.lines(time_total, temperature_change, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
+               legend_kwargs=legend_kwargs, show=show, close=True)
+
+    temperature_change = [[temp_vals[voltage][pulse][np.argmin((time_vals[voltage][pulse]-30)**2)]-
+                           temp_vals[voltage][pulse][np.argmin(time_vals[voltage][pulse]**2)]
+                           for pulse in time_vals[voltage].keys()] for voltage in voltages]
+    pulses = [[pulse.removesuffix('us') for pulse in time_vals[voltage].keys()] for voltage in voltages]
+    voltage_vals = [voltage.removesuffix('kV') for voltage in voltages]
+
+    plot_kwargs = {'ylabel': r'Temperature change [$\Delta ^{\circ}$C]', 'xlabel': 'Pulse length [us]'}
+    t_save_loc = f'{save_loc}temperature_change2.pdf' if save_loc else None
+    line_kwargs_iter, legend_kwargs = legend_linelooks_combines(voltage_vals, colors=True, linestyles=True)
+    plot.lines(pulses, temperature_change, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
+               legend_kwargs=legend_kwargs, show=show, close=True)
+
+
+def spectra_over_time(data_loc, voltages, pulse_lengths, wavelength_ranges: dict[str, tuple[float, float]], *, save_loc=None,
+                      plot_num=10, plot_num2=4):
+    wavelength = {}
+    intensity = {}
+    times = {}
+
+    for voltage in voltages:
+        wavelength[voltage] = {}
+        intensity[voltage] = {}
+        times[voltage] = {}
+
+        for pulse in pulse_lengths:
+            loc = f'{data_loc}_{voltage}_{pulse}.hdf5'
+            if not os.path.exists(loc):
+                continue
+
+            data: OESData = read_hdf5(loc)['emission']
+            data = data.remove_dead_pixels()
+            wavelength_range_vals = [wavelength_ranges[key] for key in wavelength_ranges.keys()]
+            data = data.remove_background_interp_off({'wavelength_range': wavelength_range_vals, 'relative_threshold': 0.25})
+
+            wavelength[voltage][pulse] = data.spectrum.wavelengths
+            intensity[voltage][pulse] = data.spectrum.intensities
+            times[voltage][pulse] = (data.spectrum.times - data.spectrum.times[0])/60
+
+    def mk_mask(wavelengths, range_val):
+        return (wavelengths > range_val[0]) & (wavelengths < range_val[1])
+
+    def mk_average(a, num):
+        values = np.linspace(0, len(a), num + 1, dtype=int)
+        return np.array([np.mean(a[x:y], axis=0) for x, y in zip(values[:-1], values[1:])])
+
+    for name, range_val in wavelength_ranges.items():
+        wavelengths_total = [wavelength[voltage][pulse][mk_mask(wavelength[voltage][pulse], range_val)] for voltage in wavelength for pulse in wavelength[voltage]]
+        intensities_flat = [intensity[voltage][pulse][:, mk_mask(wavelength[voltage][pulse], range_val)] for voltage in wavelength for pulse in wavelength[voltage]]
+        times_flat = [times[voltage][pulse] for voltage in wavelength for pulse in wavelength[voltage]]
+
+        intensities_total = [mk_average(val, plot_num) for val in intensities_flat]
+        times_total = [mk_average(val, plot_num) for val in times_flat]
+
+        voltage = [voltage.removesuffix('kV') for voltage in wavelength for _ in wavelength[voltage]]
+        pulse = [pulse.removesuffix('us') for voltage in wavelength for pulse in wavelength[voltage]]
+        for v, p, wav, inten, tims in zip(voltage, pulse, wavelengths_total, intensities_total, times_total, strict=True):
+            colors, sm = cbar.cbar_norm_colors(tims)
+            cbar_kwargs = {'label': 'Time [min]', 'mappable': sm}
+            plot_kwargs = {'ylabel': 'Intensity [A.U.]', 'xlabel': 'Wavelength [nm]'}
+            t_save_loc = f'{save_loc}emission_{name}_{v}_{p}.pdf' if save_loc else None
+            plot.lines(wav, inten[1:-1], colors=colors[1:-1], plot_kwargs=plot_kwargs, save_loc=t_save_loc, cbar_kwargs=cbar_kwargs, show=False, close=True)
+            inten_normed = [i/np.max(i) for i in inten]
+            t_save_loc = f'{save_loc}emission_{name}_{v}_{p}_norm.pdf' if save_loc else None
+            plot.lines(wav, inten_normed[1:-1], colors=colors[1:-1], plot_kwargs=plot_kwargs, save_loc=t_save_loc, cbar_kwargs=cbar_kwargs, show=False, close=True)
+            index = len(inten_normed)//2
+            inten_normed_rel = [i - inten_normed[index] for i in inten_normed]
+            t_save_loc = f'{save_loc}emission_{name}_{v}_{p}_norm_change.pdf' if save_loc else None
+            plot.lines(wav, inten_normed_rel[1:-1], colors=colors[1:-1], plot_kwargs=plot_kwargs, save_loc=t_save_loc, cbar_kwargs=cbar_kwargs,
+                       show=False, close=True)
+
+        intensities_total = [mk_average(val, plot_num2) for val in intensities_flat]
+
+        for i in range(plot_num2):
+            wavelengths_sel = [wavelengths_total[j] for j in range(len(wavelengths_total))]
+            intensities_sel = [intensities_total[j][i] for j in range(len(intensities_total))]
+            max_intensity = [np.max(i) for i in intensities_sel]
+            intensities_sel = sort_by(max_intensity, intensities_sel)[0]
+            mask = [(np.max(i) - np.min(i)) > 100 for i in intensities_sel]
+
+            wavelengths_selc = [wavelengths_sel[j] for j in range(len(wavelengths_sel)) if mask[j]]
+            intensities_selc = [intensities_sel[j] for j in range(len(intensities_sel)) if mask[j]]
+            times_selc = [times_total[j][i] for j in range(len(times_total)) if mask[j]]
+            pulse_selc = [pulse[j] for j in range(len(pulse)) if mask[j]]
+            voltage_selc = [voltage[j] for j in range(len(voltage)) if mask[j]]
+
+            line_kwargs_iter = linestyles.linelooks_by(color_values=pulse, linestyle_values=voltage, colors=width_colors)
+            legend_kwargs = legend_linelooks(line_kwargs_iter, color_labels=pulse, linestyle_labels=voltage,
+                                             color_title='W [us]', linestyle_title='H [kV]')
+            plot_kwargs = {'ylabel': 'Intensity [A.U.]', 'xlabel': 'Wavelength [nm]'}
+            t_save_loc = f'{save_loc}emission_{name}_{i}.pdf' if save_loc else None
+            plot.lines(wavelengths_sel, intensities_sel, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
+                       legend_kwargs=legend_kwargs, show=False, close=True)
+
+            plot_kwargs['ylim'] = (0, 1.05)
+            intensities_sel_normed = [i/np.max(i) for i in intensities_sel]
+            t_save_loc = f'{save_loc}emission_{name}_{i}_norm.pdf' if save_loc else None
+            plot.lines(wavelengths_sel, intensities_sel_normed, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs, save_loc=t_save_loc,
+                       legend_kwargs=legend_kwargs, show=False, close=True)
+
+            line_kwargs_iter = linestyles.linelooks_by(color_values=pulse_selc, linestyle_values=voltage_selc, colors=width_colors)
+            legend_kwargs = legend_linelooks(line_kwargs_iter, color_labels=pulse_selc, linestyle_labels=voltage_selc,
+                                             color_title='W [us]', linestyle_title='H [kV]')
+            plot_kwargs = {'ylabel': 'Intensity [A.U.]', 'xlabel': 'Wavelength [nm]'}
+            t_save_loc = f'{save_loc}emission_mask_{name}_{i}.pdf' if save_loc else None
+            plot.lines(wavelengths_selc, intensities_selc, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs,
+                       save_loc=t_save_loc, legend_kwargs=legend_kwargs, show=False, close=True)
+
+            plot_kwargs['ylim'] = (0, 1.05)
+            intensities_selc_normed = [i / np.max(i) for i in intensities_selc]
+            t_save_loc = f'{save_loc}emission_mask_{name}_{i}_norm.pdf' if save_loc else None
+            plot.lines(wavelengths_selc, intensities_selc_normed, line_kwargs_iter=line_kwargs_iter, plot_kwargs=plot_kwargs,
+                       save_loc=t_save_loc, legend_kwargs=legend_kwargs, show=False, close=True)
